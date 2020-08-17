@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/akaritrading/prices/binance"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/gorilla/websocket"
-	"github.com/scarface382/prices/binance"
 )
 
 var upgrader = websocket.Upgrader{
