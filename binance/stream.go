@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/akaritrading/libs/stream"
 	"github.com/gorilla/websocket"
 )
 
@@ -28,101 +29,46 @@ type aggTradeRaw struct {
 	QuantityStr string `json:"q"`
 }
 
-// Stream -
-type Stream struct {
-	stopCh    chan struct{}
-	publishCh chan string
-	subCh     chan chan interface{}
-	unsubCh   chan chan interface{}
-}
-
 var streamMap sync.Map
 
 // PriceStream -
-func PriceStream(symbol string) *Stream {
+func PriceStream(symbol string) *stream.Stream {
 
 	loadedStream, ok := streamMap.Load(symbol)
 
 	if ok {
 		fmt.Println("FROM CACHE")
-		return loadedStream.(*Stream)
+		return loadedStream.(*stream.Stream)
 	}
 
-	stream := createStrem()
+	stream := stream.CreateStream()
 	streamMap.Store(symbol, stream)
-	go stream.start()
 	go newConn(fmt.Sprintf("%s/%s%s", websockethost, symbol, "@aggTrade"), stream)
 	return stream
 }
 
-func newConn(url string, stream *Stream) {
+func newConn(url string, stream *stream.Stream) {
 
-	defer func() {
+	for {
+
+		var data aggTradeRaw
+
+		conn, _, err := websocket.DefaultDialer.Dial(url, nil)
+		if err != nil {
+			goto reconnect
+		}
+
+		for {
+			err = conn.ReadJSON(&data)
+			if err != nil {
+				goto reconnect
+			}
+			stream.Publish(data.PriceStr)
+		}
+
+	reconnect:
 		time.Sleep(time.Second * 5)
 		newConn(url, stream)
-	}()
-
-	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
-	if err != nil {
-		return
 	}
 
-	var data aggTradeRaw
-	for {
-		err = conn.ReadJSON(&data)
-		if err != nil {
-			return
-		}
-		stream.publish(data.PriceStr)
-	}
-}
-
-func createStrem() *Stream {
-	return &Stream{
-		stopCh:    make(chan struct{}),
-		publishCh: make(chan string),
-		subCh:     make(chan chan interface{}, 1),
-		unsubCh:   make(chan chan interface{}, 1),
-	}
-}
-
-func (b *Stream) start() {
-	subs := map[chan interface{}]struct{}{}
-	for {
-		select {
-		case <-b.stopCh:
-			return
-		case msgCh := <-b.subCh:
-			subs[msgCh] = struct{}{}
-		case msgCh := <-b.unsubCh:
-			delete(subs, msgCh)
-		case msg := <-b.publishCh:
-			for msgCh := range subs {
-				select {
-				case msgCh <- msg:
-				default:
-				}
-			}
-		}
-	}
-}
-
-// Subscribe -
-func (b *Stream) Subscribe() chan interface{} {
-	msgCh := make(chan interface{}, 5)
-	b.subCh <- msgCh
-	return msgCh
-}
-
-// Unsubscribe -
-func (b *Stream) Unsubscribe(msgCh chan interface{}) {
-	b.unsubCh <- msgCh
-}
-
-func (b *Stream) stop() {
-	close(b.stopCh)
-}
-
-func (b *Stream) publish(msg string) {
-	b.publishCh <- msg
 }

@@ -19,7 +19,7 @@ var upgrader = websocket.Upgrader{
 
 func main() {
 
-	err := binance.Init(time.Minute, "USDT")
+	err := binance.Init(time.Minute, "USDT", "BTC")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -27,7 +27,7 @@ func main() {
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.DefaultLogger)
-	r.Get("/prices/{exchange}/{symbol}", pricesWebsocket)
+	r.Get("/{exchange}/prices/{symbol}", pricesWebsocket)
 
 	http.ListenAndServe(":8080", r)
 }
@@ -52,17 +52,18 @@ func pricesWebsocket(w http.ResponseWriter, r *http.Request) {
 		defer conn.Close()
 
 		stream := binance.PriceStream(symbol)
-		sub := stream.Subscribe()
+		sub := stream.Subscribe(1)
 
 		conn.SetCloseHandler(func(code int, text string) error {
-			stream.Unsubscribe(sub)
+			sub.Unsubscribe()
 			return nil
 		})
 
 		for {
-			err = conn.WriteJSON(<-sub)
+			val, _ := sub.Read()
+			err = conn.WriteJSON(val)
 			if err != nil {
-				stream.Unsubscribe(sub)
+				sub.Unsubscribe()
 				return
 			}
 		}
