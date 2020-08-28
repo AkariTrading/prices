@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
 	"strings"
@@ -27,9 +28,29 @@ func main() {
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.DefaultLogger)
-	r.Get("/{exchange}/prices/{symbol}", pricesWebsocket)
+	r.Get("/{exchange}/priceStream/{symbol}", pricesWebsocket)
+	r.Get("/{exchange}/orderbookPrice/{symbol}", orderbookPrice)
 
 	http.ListenAndServe(":8080", r)
+}
+
+func orderbookPrice(w http.ResponseWriter, r *http.Request) {
+	symbol := strings.ToLower(chi.URLParam(r, "symbol"))
+	exchange := strings.ToLower(chi.URLParam(r, "exchange"))
+
+	if exchange == "binance" {
+		if !binance.CheckSymbol(symbol) {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		price, _ := binance.OrderBookPrice(symbol)
+		js, _ := json.Marshal(price)
+		w.Write(js)
+	}
+
+	w.WriteHeader(http.StatusNotFound)
+	return
 }
 
 func pricesWebsocket(w http.ResponseWriter, r *http.Request) {

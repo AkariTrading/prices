@@ -13,7 +13,5 @@ func Init(priceRefreshRate time.Duration, allowedBasedAssets ...string) error {
 	if err := initSymbols(allowedBasedAssets...); err != nil {
 		return err
 	}
-
-	initPrice(priceRefreshRate)
 	return nil
 }

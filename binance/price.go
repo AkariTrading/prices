@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"sync"
+	"strings"
 	"time"
 
 	"github.com/akaritrading/libs/util"
@@ -15,76 +15,57 @@ import (
 type orderbook struct {
 	Asks         [][]string `json:"asks"`
 	Bids         [][]string `json:"bids"`
-	LastUpdateId int        `json:"lastUpdateId"`
+	lastUpdateId int        `json:"lastUpdateId"`
 }
 
 type pricestreamdata struct {
 	P string `json:"p"`
 }
 
-type priceCheckPoint struct {
-	sell     float64
-	buy      float64
-	lastSave time.Time
+type OrderbookPrice struct {
+	Sell float64 `json:"sell"`
+	Buy  float64 `json:"buy"`
 }
 
-var priceCheckPoints sync.Map
-
-// PriceRate - controls refresh rate of Price
-var priceRate time.Duration
-
-func initPrice(t time.Duration) {
-	priceRate = t
+var client = http.Client{
+	Timeout: time.Second * 10,
 }
 
 // OrderBookPrice -
-func OrderBookPrice(symbol string) (float64, float64, error) {
+func OrderBookPrice(symbol string) (OrderbookPrice, error) {
 
 	if _, ok := symbolsMap[symbol]; !ok {
-		return 0, 0, errors.New("symbol not found")
+		return OrderbookPrice{}, errors.New("symbol not found")
 	}
 
-	val, ok := priceCheckPoints.Load(symbol)
-
-	if ok {
-		checkpoint := val.(priceCheckPoint)
-		if time.Since(checkpoint.lastSave) > priceRate {
-			fmt.Println("expired")
-			return fetchAndStorePrice(symbol)
-		}
-		fmt.Println("cachehit")
-		return checkpoint.sell, checkpoint.buy, nil
-	}
-
-	fmt.Println("cachemiss")
-	return fetchAndStorePrice(symbol)
+	return fetchPrice(symbol)
 }
 
-func fetchAndStorePrice(symbol string) (float64, float64, error) {
+func fetchPrice(symbol string) (OrderbookPrice, error) {
 
+	fmt.Println("symbol", symbol)
 	var data orderbook
-	err := httpGETJson(fmt.Sprintf("https://api.binance.com/api/v3/depth?symbol=%s", symbol), &data)
+	err := httpGETJson(fmt.Sprintf("https://api.binance.com/api/v3/depth?symbol=%s", strings.ToUpper(symbol)), &data)
 	if err != nil {
-		return 0, 0, err
+		return OrderbookPrice{}, err
 	}
 
 	sell, err := util.StrToFloat64(data.Bids[0][0])
 	if err != nil {
-		return 0, 0, err
+		return OrderbookPrice{}, err
 	}
 
 	buy, err := util.StrToFloat64(data.Asks[0][0])
 	if err != nil {
-		return 0, 0, err
+		return OrderbookPrice{}, err
 	}
 
-	priceCheckPoints.Store(symbol, priceCheckPoint{sell: sell, buy: buy, lastSave: time.Now()})
-
-	return sell, buy, nil
+	price := OrderbookPrice{Sell: sell, Buy: buy}
+	return price, nil
 }
 
 func httpGETJson(url string, obj interface{}) error {
-	res, err := http.Get(url)
+	res, err := client.Get(url)
 
 	if err != nil {
 		return err
@@ -95,6 +76,10 @@ func httpGETJson(url string, obj interface{}) error {
 	bdy, err := ioutil.ReadAll(res.Body)
 	if err != nil {
 		return err
+	}
+
+	if res.StatusCode != http.StatusOK {
+		return errors.New("")
 	}
 
 	return json.Unmarshal(bdy, &obj)
