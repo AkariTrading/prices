@@ -31,6 +31,9 @@ type aggTradeRaw struct {
 
 var streamMap sync.Map
 
+// WEBSOCKETHOST -url for binance websocket api
+var websockethost = "wss://stream.binance.com:9443/ws"
+
 // PriceStream -
 func PriceStream(symbol string) *stream.Stream {
 

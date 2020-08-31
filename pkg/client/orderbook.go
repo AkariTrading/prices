@@ -21,7 +21,7 @@ var client = http.Client{
 
 func (c *PriceClient) OrderbookPrice(symbol string) (OrderbookPrice, error) {
 
-	val, ok := c.orderbookMap.Load(symbol)
+	val, ok := c.orderbookPriceMap.Load(symbol)
 
 	if ok {
 		price := val.(OrderbookPrice)
@@ -45,7 +45,7 @@ func (c *PriceClient) fetchAndStorePrice(symbol string) (OrderbookPrice, error) 
 	}
 
 	price.lastUpdate = time.Now()
-	c.orderbookMap.Store(symbol, price)
+	c.orderbookPriceMap.Store(symbol, price)
 	return price, nil
 }
 

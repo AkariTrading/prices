@@ -5,9 +5,8 @@ import (
 	"log"
 	"net/http"
 	"strings"
-	"time"
 
-	"github.com/akaritrading/prices/binance"
+	"github.com/akaritrading/prices/exchanges/binance"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/gorilla/websocket"
@@ -20,7 +19,7 @@ var upgrader = websocket.Upgrader{
 
 func main() {
 
-	err := binance.Init(time.Minute, "USDT", "BTC")
+	err := binance.Init("TRY", "EUR", "BTC")
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -38,10 +38,10 @@ func OrderBookPrice(symbol string) (OrderbookPrice, error) {
 		return OrderbookPrice{}, errors.New("symbol not found")
 	}
 
-	return fetchPrice(symbol)
+	return fetchOrderBookPrice(symbol)
 }
 
-func fetchPrice(symbol string) (OrderbookPrice, error) {
+func fetchOrderBookPrice(symbol string) (OrderbookPrice, error) {
 
 	fmt.Println("symbol", symbol)
 	var data orderbook
