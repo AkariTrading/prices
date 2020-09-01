@@ -37,8 +37,6 @@ type Symbol struct {
 	Filters                []map[string]interface{} `json:"filters"`
 }
 
-var symbolsMap map[string]bool
-
 // CheckSymbol -
 func CheckSymbol(s string) bool {
 	_, ok := symbolsMap[s]

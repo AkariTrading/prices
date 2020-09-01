@@ -5,8 +5,13 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"sync"
 	"time"
 )
+
+var symbolsMap map[string]bool
+var symbolSaves map[string]*symbolSave
+var symbolSavesLock map[string]*sync.Mutex
 
 // Init -
 func Init(allowedBasedAssets ...string) error {
@@ -14,55 +19,74 @@ func Init(allowedBasedAssets ...string) error {
 		return err
 	}
 
-	initPriceHistoryJob()
+	symbolSavesLock = make(map[string]*sync.Mutex)
+
+	for s := range symbolsMap {
+		symbolSavesLock[s] = &sync.Mutex{}
+	}
+
+	symbolSaves = make(map[string]*symbolSave)
+
+	return priceHistoryJob()
+}
+
+func priceHistoryJob() error {
+
+	f, err := os.Open("/priceData/binance/symbols.json")
+	if err != nil {
+		err := os.MkdirAll("/priceData/binance/prices", 0770)
+		if err != nil {
+			return err
+		}
+	} else {
+		defer f.Close()
+		err := json.NewDecoder(f).Decode(&symbolSaves)
+		if err != nil {
+			return err
+		}
+	}
+
+	syncExchangeSymbols()
+
+	go fetchJob()
 
 	return nil
 }
 
-func initPriceHistoryJob() {
-
-	var symbolsToFetch map[string]*symbolSave
-
-	f, err := os.Open("./priceData/binance/symbols.json")
-	if err != nil {
-		err := os.MkdirAll("./priceData/binance/prices", 0770)
-		if err != nil {
-			log.Fatal("cannot create folders")
-		}
-		symbolsToFetch = newSymbolSaves()
-	} else {
-		defer f.Close()
-		var symbolSaves map[string]*symbolSave
-		err := json.NewDecoder(f).Decode(&symbolSaves)
-		if err != nil {
-			log.Fatal(err)
-		}
-		addNewSymbols(symbolSaves)
-		symbolsToFetch = symbolSaves
-	}
-
-	go fetchJob(symbolsToFetch)
-}
-
-func fetchJob(symbols map[string]*symbolSave) {
+func fetchJob() {
 
 	for {
-		fetchAndSaveAll(symbols)
-		json, err := json.Marshal(symbols)
+		fetchAndSaveAll()
+		json, err := json.Marshal(symbolSaves)
 		if err != nil {
 			log.Fatal(err)
 		}
-		ioutil.WriteFile("./priceData/binance/symbols.json", json, 0770)
+		ioutil.WriteFile("/priceData/binance/symbols.json", json, 0770)
 
 		time.Sleep(time.Hour)
 	}
-
 }
 
-func addNewSymbols(symbolSaves map[string]*symbolSave) {
+func newSymbolSaves() {
 	for s := range symbolsMap {
-		if _, ok := symbolSaves[s]; !ok {
-			symbolSaves[s] = &symbolSave{Start: 0, End: SymbolSaveInitialTimestamp}
+		symbolSaves[s] = &symbolSave{End: SymbolSaveInitialTimestamp}
+	}
+}
+
+func syncExchangeSymbols() {
+
+	// removes no longer existing symbols
+	for s := range symbolSaves {
+		if _, ok := symbolsMap[s]; !ok {
+			delete(symbolSaves, s)
 		}
 	}
+
+	// adds missing symbols into symbol saves
+	for s := range symbolsMap {
+		if _, ok := symbolSaves[s]; !ok {
+			symbolSaves[s] = &symbolSave{End: SymbolSaveInitialTimestamp}
+		}
+	}
+
 }

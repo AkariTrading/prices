@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -19,7 +20,7 @@ var upgrader = websocket.Upgrader{
 
 func main() {
 
-	err := binance.Init("TRY", "EUR", "BTC")
+	err := binance.Init("TRY", "EUR")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -30,7 +31,19 @@ func main() {
 	r.Get("/{exchange}/priceStream/{symbol}", pricesWebsocket)
 	r.Get("/{exchange}/orderbookPrice/{symbol}", orderbookPrice)
 
+	r.Route("/{exchange}/priceData", func(newRoute chi.Router) {
+		newRoute.Use(middleware.Compress(5))
+		newRoute.Get("/", priceData)
+
+	})
+
 	http.ListenAndServe(":8080", r)
+}
+
+func priceData(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("price data")
+	w.Header().Set("Content-Type", "application/json")
+	w.Write([]byte("yo what up"))
 }
 
 func orderbookPrice(w http.ResponseWriter, r *http.Request) {

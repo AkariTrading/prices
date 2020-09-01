@@ -17,6 +17,7 @@ import (
 
 const (
 	SymbolNotFoundError = "SymbolNotFoundError"
+	ExchangeError       = "ExchangeError"
 )
 
 const (
@@ -47,7 +48,7 @@ type symbolCandle struct {
 	Volume float64
 }
 
-func FetchKlines(symbol string, save *symbolSave) ([]symbolCandle, error) {
+func fetchKlines(symbol string, save *symbolSave) ([]symbolCandle, error) {
 
 	if !CheckSymbol(symbol) {
 		return nil, errors.New(SymbolNotFoundError)
@@ -76,6 +77,10 @@ func FetchKlines(symbol string, save *symbolSave) ([]symbolCandle, error) {
 	}
 	defer res.Body.Close()
 
+	if res.StatusCode != http.StatusOK {
+		return nil, errors.New(ExchangeError)
+	}
+
 	var data [][]interface{}
 	if err = json.NewDecoder(res.Body).Decode(&data); err != nil {
 		return nil, err
@@ -98,13 +103,16 @@ func FetchKlines(symbol string, save *symbolSave) ([]symbolCandle, error) {
 
 	if len(data) > 0 {
 		lastCandle := data[len(data)-1]
+		lock := symbolSavesLock[symbol]
+		lock.Lock()
 		save.End = int64(lastCandle[OPENTIME].(float64)) + (60 * 1000) // skip one minute
+		defer lock.Unlock()
 	}
 
 	return historyPoints, nil
 }
 
-func fetchAndSaveAll(symbolSaves map[string]*symbolSave) {
+func fetchAndSaveAll() {
 
 	jobs := make(chan symbolFetchJob, len(symbolSaves))
 	workersCount := 10
@@ -121,55 +129,59 @@ func fetchAndSaveAll(symbolSaves map[string]*symbolSave) {
 
 	close(jobs)
 	wg.Wait()
+
+	fmt.Println("finished all")
 }
 
+// TODO: handle error better
 func fetchAndSave(jobs chan symbolFetchJob, wg *sync.WaitGroup) {
 
-	var points []symbolCandle
-
-	now := (time.Now().Unix() - 60) * 1000 // roll back a minute
-
+	defer wg.Done()
 	for job := range jobs {
 
-		fmt.Println("will fetch " + job.Symbol)
+		now := (time.Now().Unix() - 60) * 1000 // roll back a minute
+		var points []symbolCandle
 
-		f, err := os.OpenFile(fmt.Sprintf("./priceData/binance/prices/%s", job.Symbol), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		for job.Save.End <= now {
+			history, err := fetchKlines(job.Symbol, job.Save)
+			if err == nil {
+				points = append(points, history...)
+			} else if err.Error() == ExchangeError {
+				log.Fatal(err)
+				return
+			} else {
+				log.Fatal(err)
+				// TODO: log
+			}
+		}
+
+		f, err := os.OpenFile(fmt.Sprintf("/priceData/binance/prices/%s", job.Symbol), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 		if err != nil {
 			log.Fatal(err)
 		}
 		defer f.Close()
 
-		for job.Save.End <= now {
-			history, err := FetchKlines(job.Symbol, job.Save)
-			if err == nil {
-				points = append(points, history...)
-			}
-			// TODO: log error
-		}
-
+		lock := symbolSavesLock[job.Symbol]
+		lock.Lock()
 		for _, p := range points {
 			binary.Write(f, binary.LittleEndian, p)
 		}
+		defer lock.Unlock()
+		// fmt.Println("finished ", job.Symbol)
 	}
-
-	wg.Done()
 }
 
-func newSymbolSaves() map[string]*symbolSave {
+func GetSymbolHistory(symbol string) ([]symbolCandle, error) {
 
-	symbolSaves := make(map[string]*symbolSave)
-	for s := range symbolsMap {
-		symbolSaves[s] = &symbolSave{End: SymbolSaveInitialTimestamp}
-	}
+	lock := symbolSavesLock[symbol]
+	lock.Lock()
+	defer lock.Unlock()
 
-	return symbolSaves
-}
+	// TODO: cache locally
 
-func GetData(symbol string) ([]symbolCandle, error) {
-
-	f, err := os.Open(fmt.Sprintf("./priceData/binance/prices/%s", symbol))
+	f, err := os.Open(fmt.Sprintf("/priceData/binance/prices/%s", symbol))
 	if err != nil {
-		log.Fatal(err)
+		// handle better
 		return nil, err
 	}
 	defer f.Close()
