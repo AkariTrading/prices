@@ -10,8 +10,8 @@ import (
 )
 
 var symbolsMap map[string]bool
-var symbolSaves map[string]*client.HistoryPosition
-var symbolSavesLock map[string]*sync.Mutex
+var symbolHistoryPositions map[string]*client.HistoryPosition
+var symbolHistoryLocks map[string]*sync.Mutex
 
 // Init -
 func Init(allowedBasedAssets ...string) error {
@@ -19,13 +19,13 @@ func Init(allowedBasedAssets ...string) error {
 		return err
 	}
 
-	symbolSavesLock = make(map[string]*sync.Mutex)
+	symbolHistoryLocks = make(map[string]*sync.Mutex)
 
 	for s := range symbolsMap {
-		symbolSavesLock[s] = &sync.Mutex{}
+		symbolHistoryLocks[s] = &sync.Mutex{}
 	}
 
-	symbolSaves = make(map[string]*client.HistoryPosition)
+	symbolHistoryPositions = make(map[string]*client.HistoryPosition)
 
 	return priceHistoryJob()
 }
@@ -38,7 +38,7 @@ func priceHistoryJob() error {
 		if err != nil {
 			return err
 		}
-		symbolSaves = make(map[string]*client.HistoryPosition)
+		symbolHistoryPositions = make(map[string]*client.HistoryPosition)
 	} else {
 		defer f.Close()
 
@@ -46,7 +46,7 @@ func priceHistoryJob() error {
 		if err != nil {
 			return err
 		}
-		symbolSaves = saves
+		symbolHistoryPositions = saves
 	}
 
 	syncExchangeSymbols()
@@ -66,30 +66,30 @@ func fetchJob() {
 
 	for {
 		fetchAndSaveAll()
-		client.WriteHistoryPositions(f, symbolSaves)
+		client.WriteHistoryPositions(f, symbolHistoryPositions)
 		time.Sleep(time.Hour)
 	}
 }
 
 func newSymbolSaves() {
 	for s := range symbolsMap {
-		symbolSaves[s] = &client.HistoryPosition{End: SymbolSaveInitialTimestamp}
+		symbolHistoryPositions[s] = &client.HistoryPosition{End: SymbolSaveInitialTimestamp}
 	}
 }
 
 func syncExchangeSymbols() {
 
 	// removes no longer existing symbols
-	for s := range symbolSaves {
+	for s := range symbolHistoryPositions {
 		if _, ok := symbolsMap[s]; !ok {
-			delete(symbolSaves, s)
+			delete(symbolHistoryPositions, s)
 		}
 	}
 
 	// adds missing symbols into symbol saves
 	for s := range symbolsMap {
-		if _, ok := symbolSaves[s]; !ok {
-			symbolSaves[s] = &client.HistoryPosition{End: SymbolSaveInitialTimestamp}
+		if _, ok := symbolHistoryPositions[s]; !ok {
+			symbolHistoryPositions[s] = &client.HistoryPosition{End: SymbolSaveInitialTimestamp}
 		}
 	}
 

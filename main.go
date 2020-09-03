@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -33,7 +32,7 @@ func main() {
 	r.Get("/{exchange}/orderbookPrice/{symbol}", orderbookPrice)
 
 	r.Route("/{exchange}/history/{symbol}", func(newRoute chi.Router) {
-		newRoute.Use(middleware.Compress(5))
+		// newRoute.Use(middleware.Compress(5))
 		newRoute.Get("/", priceHistory)
 
 	})
@@ -52,10 +51,6 @@ func priceHistory(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		start = 0
 	}
-
-	fmt.Println(exchange)
-	fmt.Println(symbol)
-	fmt.Println(start)
 
 	if exchange == "binance" {
 		if !binance.CheckSymbol(symbol) {

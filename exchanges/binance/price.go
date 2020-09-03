@@ -13,9 +13,8 @@ import (
 )
 
 type orderbook struct {
-	Asks         [][]string `json:"asks"`
-	Bids         [][]string `json:"bids"`
-	lastUpdateId int        `json:"lastUpdateId"`
+	Asks [][]string `json:"asks"`
+	Bids [][]string `json:"bids"`
 }
 
 type pricestreamdata struct {

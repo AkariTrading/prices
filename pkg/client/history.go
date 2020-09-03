@@ -160,7 +160,7 @@ func lockSymbol(symbol string) {
 func unlockSymbol(symbol string) {
 	symbolLock.Lock()
 	l, ok := symbolLocks[symbol]
-	historyPositionLock.Unlock()
+	symbolLock.Unlock()
 
 	if ok {
 		l.Unlock()
@@ -199,14 +199,14 @@ func HistoryWindow(f *os.File, save *HistoryPosition, start int64, end int64) (*
 
 	var millisecondsInMinute int64 = 60 * 1000
 
-	emptyHistory := History{HistoryPosition: HistoryPosition{Start: save.End, End: save.End}}
+	emptyHistory := &History{HistoryPosition: HistoryPosition{Start: save.End, End: save.End}}
 
 	if start >= save.End {
-		return &emptyHistory, nil
+		return emptyHistory, nil
 	}
 
 	if end > 0 && (end <= start || end <= save.Start) {
-		return &emptyHistory, nil
+		return emptyHistory, nil
 	}
 
 	total := (save.End - save.Start) / millisecondsInMinute
@@ -218,7 +218,7 @@ func HistoryWindow(f *os.File, save *HistoryPosition, start int64, end int64) (*
 	}
 
 	if offset >= total {
-		return &emptyHistory, nil
+		return emptyHistory, nil
 	}
 
 	dataSize := int64(unsafe.Sizeof(Candle{}))

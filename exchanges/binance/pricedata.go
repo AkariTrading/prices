@@ -18,8 +18,8 @@ import (
 )
 
 var (
-	ErrorSymbolNotFound  = errors.New("ErrorSymbolNotFound")
-	ErrorUnknownExchange = errors.New("ErrorUnknownExchange")
+	ErrorSymbolNotFound = errors.New("ErrorSymbolNotFound")
+	ErrorExchange       = errors.New("ErrorExchange")
 )
 
 const (
@@ -66,7 +66,7 @@ func fetchKlines(symbol string, save *client.HistoryPosition) ([]client.Candle, 
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		return nil, ErrorUnknownExchange
+		return nil, ErrorExchange
 	}
 
 	var data [][]interface{}
@@ -91,7 +91,7 @@ func fetchKlines(symbol string, save *client.HistoryPosition) ([]client.Candle, 
 
 	if len(data) > 0 {
 		lastCandle := data[len(data)-1]
-		lock := symbolSavesLock[symbol]
+		lock := symbolHistoryLocks[symbol]
 		lock.Lock()
 		save.End = int64(lastCandle[OPENTIME].(float64)) + (60 * 1000) // skip one minute
 		defer lock.Unlock()
@@ -102,7 +102,7 @@ func fetchKlines(symbol string, save *client.HistoryPosition) ([]client.Candle, 
 
 func fetchAndSaveAll() {
 
-	jobs := make(chan symbolFetchJob, len(symbolSaves))
+	jobs := make(chan symbolFetchJob, len(symbolHistoryPositions))
 	workersCount := 10
 	var wg sync.WaitGroup
 	wg.Add(workersCount)
@@ -111,7 +111,7 @@ func fetchAndSaveAll() {
 		go fetchAndSave(jobs, &wg)
 	}
 
-	for symbol, save := range symbolSaves {
+	for symbol, save := range symbolHistoryPositions {
 		jobs <- symbolFetchJob{Save: save, Symbol: symbol}
 	}
 
@@ -134,7 +134,7 @@ func fetchAndSave(jobs chan symbolFetchJob, wg *sync.WaitGroup) {
 			candles, err := fetchKlines(job.Symbol, job.Save)
 			if err == nil {
 				points = append(points, candles...)
-			} else if err == ErrorUnknownExchange {
+			} else if err == ErrorExchange {
 				log.Fatal(err)
 				return
 			} else {
@@ -149,7 +149,7 @@ func fetchAndSave(jobs chan symbolFetchJob, wg *sync.WaitGroup) {
 		}
 		defer f.Close()
 
-		lock := symbolSavesLock[job.Symbol]
+		lock := symbolHistoryLocks[job.Symbol]
 		lock.Lock()
 
 		client.WriteCandles(f, points)
@@ -164,7 +164,7 @@ func fetchAndSave(jobs chan symbolFetchJob, wg *sync.WaitGroup) {
 
 func GetSymbolHistory(symbol string, start int64) (*client.History, error) {
 
-	lock := symbolSavesLock[symbol]
+	lock := symbolHistoryLocks[symbol]
 	lock.Lock()
 	defer lock.Unlock()
 
@@ -175,5 +175,5 @@ func GetSymbolHistory(symbol string, start int64) (*client.History, error) {
 	}
 	defer f.Close()
 
-	return client.HistoryWindow(f, symbolSaves[symbol], start, 0)
+	return client.HistoryWindow(f, symbolHistoryPositions[symbol], start, 0)
 }
