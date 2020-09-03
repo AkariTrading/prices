@@ -1,16 +1,16 @@
 package binance
 
 import (
-	"encoding/json"
-	"io/ioutil"
 	"log"
 	"os"
 	"sync"
 	"time"
+
+	"github.com/akaritrading/prices/pkg/client"
 )
 
 var symbolsMap map[string]bool
-var symbolSaves map[string]*symbolSave
+var symbolSaves map[string]*client.HistoryPosition
 var symbolSavesLock map[string]*sync.Mutex
 
 // Init -
@@ -25,7 +25,7 @@ func Init(allowedBasedAssets ...string) error {
 		symbolSavesLock[s] = &sync.Mutex{}
 	}
 
-	symbolSaves = make(map[string]*symbolSave)
+	symbolSaves = make(map[string]*client.HistoryPosition)
 
 	return priceHistoryJob()
 }
@@ -38,12 +38,15 @@ func priceHistoryJob() error {
 		if err != nil {
 			return err
 		}
+		symbolSaves = make(map[string]*client.HistoryPosition)
 	} else {
 		defer f.Close()
-		err := json.NewDecoder(f).Decode(&symbolSaves)
+
+		saves, err := client.ReadHistoryPositions(f)
 		if err != nil {
 			return err
 		}
+		symbolSaves = saves
 	}
 
 	syncExchangeSymbols()
@@ -55,21 +58,22 @@ func priceHistoryJob() error {
 
 func fetchJob() {
 
+	f, err := os.OpenFile("/priceData/binance/symbols.json", os.O_CREATE|os.O_WRONLY, 0770)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer f.Close()
+
 	for {
 		fetchAndSaveAll()
-		json, err := json.Marshal(symbolSaves)
-		if err != nil {
-			log.Fatal(err)
-		}
-		ioutil.WriteFile("/priceData/binance/symbols.json", json, 0770)
-
+		client.WriteHistoryPositions(f, symbolSaves)
 		time.Sleep(time.Hour)
 	}
 }
 
 func newSymbolSaves() {
 	for s := range symbolsMap {
-		symbolSaves[s] = &symbolSave{End: SymbolSaveInitialTimestamp}
+		symbolSaves[s] = &client.HistoryPosition{End: SymbolSaveInitialTimestamp}
 	}
 }
 
@@ -85,7 +89,7 @@ func syncExchangeSymbols() {
 	// adds missing symbols into symbol saves
 	for s := range symbolsMap {
 		if _, ok := symbolSaves[s]; !ok {
-			symbolSaves[s] = &symbolSave{End: SymbolSaveInitialTimestamp}
+			symbolSaves[s] = &client.HistoryPosition{End: SymbolSaveInitialTimestamp}
 		}
 	}
 

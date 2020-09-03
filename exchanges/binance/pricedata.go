@@ -13,11 +13,13 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/akaritrading/prices/pkg/client"
 )
 
-const (
-	SymbolNotFoundError = "SymbolNotFoundError"
-	ExchangeError       = "ExchangeError"
+var (
+	ErrorSymbolNotFound  = errors.New("ErrorSymbolNotFound")
+	ErrorUnknownExchange = errors.New("ErrorUnknownExchange")
 )
 
 const (
@@ -33,25 +35,15 @@ const (
 	SymbolSaveInitialTimestamp = 1598804620000 // make 0 for production
 )
 
-type symbolSave struct {
-	Start int64
-	End   int64
-}
-
 type symbolFetchJob struct {
 	Symbol string
-	Save   *symbolSave
+	Save   *client.HistoryPosition
 }
 
-type symbolCandle struct {
-	Price  float64
-	Volume float64
-}
-
-func fetchKlines(symbol string, save *symbolSave) ([]symbolCandle, error) {
+func fetchKlines(symbol string, save *client.HistoryPosition) ([]client.Candle, error) {
 
 	if !CheckSymbol(symbol) {
-		return nil, errors.New(SymbolNotFoundError)
+		return nil, ErrorSymbolNotFound
 	}
 
 	query := url.Values{}
@@ -63,11 +55,7 @@ func fetchKlines(symbol string, save *symbolSave) ([]symbolCandle, error) {
 	url, _ := url.Parse("https://api.binance.com/api/v3/klines")
 	url.RawQuery = query.Encode()
 
-	client := http.Client{
-		Timeout: time.Second * 30,
-	}
-
-	res, err := client.Do(&http.Request{
+	res, err := requestClient.Do(&http.Request{
 		Method: "GET",
 		URL:    url,
 	})
@@ -78,7 +66,7 @@ func fetchKlines(symbol string, save *symbolSave) ([]symbolCandle, error) {
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		return nil, errors.New(ExchangeError)
+		return nil, ErrorUnknownExchange
 	}
 
 	var data [][]interface{}
@@ -86,7 +74,7 @@ func fetchKlines(symbol string, save *symbolSave) ([]symbolCandle, error) {
 		return nil, err
 	}
 
-	var historyPoints []symbolCandle
+	var candles []client.Candle
 
 	for _, candle := range data {
 
@@ -98,7 +86,7 @@ func fetchKlines(symbol string, save *symbolSave) ([]symbolCandle, error) {
 		low, _ := strconv.ParseFloat(candle[LOW].(string), 64)
 		vol, _ := strconv.ParseFloat(candle[VOLUME].(string), 64)
 
-		historyPoints = append(historyPoints, symbolCandle{Price: float64((high + low) / 2), Volume: vol})
+		candles = append(candles, client.Candle{Price: float64((high + low) / 2), Volume: vol})
 	}
 
 	if len(data) > 0 {
@@ -109,7 +97,7 @@ func fetchKlines(symbol string, save *symbolSave) ([]symbolCandle, error) {
 		defer lock.Unlock()
 	}
 
-	return historyPoints, nil
+	return candles, nil
 }
 
 func fetchAndSaveAll() {
@@ -139,14 +127,14 @@ func fetchAndSave(jobs chan symbolFetchJob, wg *sync.WaitGroup) {
 	defer wg.Done()
 	for job := range jobs {
 
-		now := (time.Now().Unix() - 60) * 1000 // roll back a minute
-		var points []symbolCandle
+		now := (time.Now().Unix() - (5 * 60)) * 1000 // roll back 5 minutes
+		var points []client.Candle
 
 		for job.Save.End <= now {
-			history, err := fetchKlines(job.Symbol, job.Save)
+			candles, err := fetchKlines(job.Symbol, job.Save)
 			if err == nil {
-				points = append(points, history...)
-			} else if err.Error() == ExchangeError {
+				points = append(points, candles...)
+			} else if err == ErrorUnknownExchange {
 				log.Fatal(err)
 				return
 			} else {
@@ -163,6 +151,9 @@ func fetchAndSave(jobs chan symbolFetchJob, wg *sync.WaitGroup) {
 
 		lock := symbolSavesLock[job.Symbol]
 		lock.Lock()
+
+		client.WriteCandles(f, points)
+
 		for _, p := range points {
 			binary.Write(f, binary.LittleEndian, p)
 		}
@@ -171,13 +162,11 @@ func fetchAndSave(jobs chan symbolFetchJob, wg *sync.WaitGroup) {
 	}
 }
 
-func GetSymbolHistory(symbol string) ([]symbolCandle, error) {
+func GetSymbolHistory(symbol string, start int64) (*client.History, error) {
 
 	lock := symbolSavesLock[symbol]
 	lock.Lock()
 	defer lock.Unlock()
-
-	// TODO: cache locally
 
 	f, err := os.Open(fmt.Sprintf("/priceData/binance/prices/%s", symbol))
 	if err != nil {
@@ -186,8 +175,5 @@ func GetSymbolHistory(symbol string) ([]symbolCandle, error) {
 	}
 	defer f.Close()
 
-	stat, _ := f.Stat()
-	candles := make([]symbolCandle, stat.Size()/16)
-	err = binary.Read(f, binary.LittleEndian, candles)
-	return candles, err
+	return client.HistoryWindow(f, symbolSaves[symbol], start, 0)
 }

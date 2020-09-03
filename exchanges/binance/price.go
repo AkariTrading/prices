@@ -27,7 +27,7 @@ type OrderbookPrice struct {
 	Buy  float64 `json:"buy"`
 }
 
-var client = http.Client{
+var requestClient = http.Client{
 	Timeout: time.Second * 10,
 }
 
@@ -65,7 +65,7 @@ func fetchOrderBookPrice(symbol string) (OrderbookPrice, error) {
 }
 
 func httpGETJson(url string, obj interface{}) error {
-	res, err := client.Get(url)
+	res, err := requestClient.Get(url)
 
 	if err != nil {
 		return err

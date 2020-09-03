@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/akaritrading/prices/exchanges/binance"
@@ -31,19 +32,50 @@ func main() {
 	r.Get("/{exchange}/priceStream/{symbol}", pricesWebsocket)
 	r.Get("/{exchange}/orderbookPrice/{symbol}", orderbookPrice)
 
-	r.Route("/{exchange}/priceData", func(newRoute chi.Router) {
+	r.Route("/{exchange}/history/{symbol}", func(newRoute chi.Router) {
 		newRoute.Use(middleware.Compress(5))
-		newRoute.Get("/", priceData)
+		newRoute.Get("/", priceHistory)
 
 	})
 
 	http.ListenAndServe(":8080", r)
 }
 
-func priceData(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("price data")
+func priceHistory(w http.ResponseWriter, r *http.Request) {
+
 	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte("yo what up"))
+
+	exchange := strings.ToLower(chi.URLParam(r, "exchange"))
+	symbol := strings.ToLower(chi.URLParam(r, "symbol"))
+
+	start, err := strconv.ParseInt(r.URL.Query().Get("start"), 10, 64)
+	if err != nil {
+		start = 0
+	}
+
+	fmt.Println(exchange)
+	fmt.Println(symbol)
+	fmt.Println(start)
+
+	if exchange == "binance" {
+		if !binance.CheckSymbol(symbol) {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		hist, err := binance.GetSymbolHistory(symbol, start)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		bdy, err := json.Marshal(hist)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		w.Write(bdy)
+	}
 }
 
 func orderbookPrice(w http.ResponseWriter, r *http.Request) {
