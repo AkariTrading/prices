@@ -34,15 +34,18 @@ func priceHistoryJob() error {
 
 	f, err := os.Open("/priceData/binance/symbols.json")
 	if err != nil {
-		err := os.MkdirAll("/priceData/binance/prices", 0770)
+		err := os.RemoveAll("/priceData/binance/prices")
+		if err != nil {
+			return err
+		}
+		err = os.MkdirAll("/priceData/binance/prices", 0770)
 		if err != nil {
 			return err
 		}
 		symbolHistoryPositions = make(map[string]*client.HistoryPosition)
 	} else {
-		defer f.Close()
-
 		saves, err := client.ReadHistoryPositions(f)
+		f.Close()
 		if err != nil {
 			return err
 		}

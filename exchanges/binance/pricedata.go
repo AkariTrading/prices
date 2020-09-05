@@ -1,7 +1,6 @@
 package binance
 
 import (
-	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -133,9 +132,13 @@ func fetchAndSave(jobs chan symbolFetchJob, wg *sync.WaitGroup) {
 		for job.Save.End <= now {
 			candles, err := fetchKlines(job.Symbol, job.Save)
 			if err == nil {
+				if len(candles) == 0 {
+					break
+				}
 				points = append(points, candles...)
 			} else if err == ErrorExchange {
 				log.Fatal(err)
+				// TODO: log
 				return
 			} else {
 				log.Fatal(err)
@@ -151,14 +154,8 @@ func fetchAndSave(jobs chan symbolFetchJob, wg *sync.WaitGroup) {
 
 		lock := symbolHistoryLocks[job.Symbol]
 		lock.Lock()
-
 		client.WriteCandles(f, points)
-
-		for _, p := range points {
-			binary.Write(f, binary.LittleEndian, p)
-		}
-		defer lock.Unlock()
-		// fmt.Println("finished ", job.Symbol)
+		lock.Unlock()
 	}
 }
 

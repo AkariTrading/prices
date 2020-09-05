@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"strings"
 	"sync"
 	"unsafe"
 )
@@ -44,20 +45,23 @@ func (c *PriceClient) InitHistory() error {
 		symbolLocks = make(map[string]*sync.Mutex)
 	}
 
-	err := os.MkdirAll("/symbolscache/binance/prices", 0770)
-	if err != nil {
-		return err
-	}
-
 	f, err := os.Open("/symbolscache/binance/symbols.json")
 	if err != nil {
+		err := os.RemoveAll("/symbolscache/binance/prices")
+		if err != nil {
+			return err
+		}
+		err = os.MkdirAll("/symbolscache/binance/prices", 0770)
+		if err != nil {
+			return err
+		}
 		historyPositions = make(HistoryPositions)
 	} else {
-		defer f.Close()
 		historyPositions, err = ReadHistoryPositions(f)
+		f.Close()
 	}
 
-	return err
+	return nil
 }
 
 // SymbolHistory - retrieves symbol price history between start and end unix millisecond timestamps.
@@ -69,13 +73,17 @@ func (c *PriceClient) SymbolHistory(symbol string, start int64, end int64) (*His
 		return nil, ErrorDateRange
 	}
 
+	symbol = strings.ToLower(symbol)
+
 	lockSymbol(symbol)
 	defer unlockSymbol(symbol)
 
 	pos, ok := getPos(symbol)
 
+	fmt.Println("found ", ok)
+
 	if !ok {
-		err := c.fetchAndCacheFile(symbol, 0)
+		err := c.fetchAndCacheFile(symbol, &HistoryPosition{})
 		if err != nil {
 			if err == ErrorSymbolNotFound {
 				delSymbolLock(symbol)
@@ -83,46 +91,64 @@ func (c *PriceClient) SymbolHistory(symbol string, start int64, end int64) (*His
 			return nil, err
 		}
 	} else {
-
 		if start > pos.End || end > pos.End {
-			err := c.fetchAndCacheFile(symbol, pos.End)
+			err := c.fetchAndCacheFile(symbol, pos)
 			if err != nil {
 				return nil, err
 			}
 		}
 	}
 
-	priceFile, err := os.Open(fmt.Sprintf("/priceData/binance/prices/%s", symbol))
+	priceFile, err := os.Open(fmt.Sprintf("/symbolscache/binance/prices/%s", symbol))
 	if err != nil {
 		return nil, err
 	}
+
+	pos, _ = getPos(symbol)
+
+	fmt.Println("pos ", pos)
 
 	return HistoryWindow(priceFile, pos, start, end)
 }
 
 // assumes symbol is locked
-func (c *PriceClient) fetchAndCacheFile(symbol string, start int64) error {
+func (c *PriceClient) fetchAndCacheFile(symbol string, pos *HistoryPosition) error {
 
-	hist, candles, err := c.getData(symbol, 0)
+	hist, candles, err := c.getData(symbol, pos.End)
 	if err != nil {
 		return err
 	}
 
-	priceFile, err := os.OpenFile(fmt.Sprintf("/priceData/binance/prices/%s", symbol), os.O_APPEND|os.O_CREATE, 0644)
+	fmt.Println("hist.Start, hist.End ", hist.Start, hist.End)
+
+	priceFile, err := os.OpenFile(fmt.Sprintf("/symbolscache/binance/prices/%s", symbol), os.O_APPEND|os.O_CREATE, 0644)
 	if err != nil {
 		return err
 	}
 	defer priceFile.Close()
 
-	posFile, err := os.OpenFile("/priceData/binance/symbols.json", os.O_APPEND|os.O_CREATE, 0644)
+	posFile, err := os.OpenFile("/symbolscache/binance/symbols.json", os.O_CREATE, 0644)
 	if err != nil {
 		return err
 	}
 	defer posFile.Close()
 
+	if pos.Start != 0 {
+		hist.Start = pos.Start
+	}
+
 	savePos(symbol, &hist.HistoryPosition)
-	WriteCandles(priceFile, candles)
-	WriteHistoryPositions(posFile, historyPositions)
+	err = WriteCandles(priceFile, candles)
+	if err != nil {
+		return err
+	}
+
+	historyPositionLock.Lock()
+	defer historyPositionLock.Unlock()
+	err = WriteHistoryPositions(posFile, historyPositions)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -175,7 +201,7 @@ func delSymbolLock(symbol string) {
 
 func (c *PriceClient) getData(symbol string, start int64) (*History, []Candle, error) {
 
-	body, err := getRequest(fmt.Sprintf("http://%s/%s/priceHistory/%s?start=%d", c.Host, c.Exchange, symbol, start))
+	body, err := getRequest(fmt.Sprintf("http://%s/%s/history/%s?start=%d", c.Host, c.Exchange, symbol, start))
 	if err != nil {
 
 		return nil, nil, err
@@ -195,26 +221,26 @@ func (c *PriceClient) getData(symbol string, start int64) (*History, []Candle, e
 	return &history, candles, nil
 }
 
-func HistoryWindow(f *os.File, save *HistoryPosition, start int64, end int64) (*History, error) {
+func HistoryWindow(f *os.File, pos *HistoryPosition, start int64, end int64) (*History, error) {
 
 	var millisecondsInMinute int64 = 60 * 1000
 
-	emptyHistory := &History{HistoryPosition: HistoryPosition{Start: save.End, End: save.End}}
+	emptyHistory := &History{HistoryPosition: HistoryPosition{Start: pos.End, End: pos.End}}
 
-	if start >= save.End {
+	if start >= pos.End {
 		return emptyHistory, nil
 	}
 
-	if end > 0 && (end <= start || end <= save.Start) {
+	if end > 0 && (end <= start || end <= pos.Start) {
 		return emptyHistory, nil
 	}
 
-	total := (save.End - save.Start) / millisecondsInMinute
+	total := (pos.End - pos.Start) / millisecondsInMinute
 
-	offset := (start - save.Start) / millisecondsInMinute
+	offset := (start - pos.Start) / millisecondsInMinute
 	if offset < 0 {
 		offset = 0
-		start = save.Start
+		start = pos.Start
 	}
 
 	if offset >= total {
@@ -224,12 +250,15 @@ func HistoryWindow(f *os.File, save *HistoryPosition, start int64, end int64) (*
 	dataSize := int64(unsafe.Sizeof(Candle{}))
 	f.Seek(offset*dataSize, 0)
 
-	if end > save.End || end == 0 {
-		end = save.End
+	if end > pos.End || end == 0 {
+		end = pos.End
 	}
+
+	fmt.Println(start, end, (end-start)/millisecondsInMinute)
 
 	candles := make([]Candle, (end-start)/millisecondsInMinute)
 	if err := binary.Read(f, binary.LittleEndian, candles); err != nil {
+		panic(err)
 		return nil, err
 	}
 
@@ -248,6 +277,7 @@ func WriteCandles(f io.Writer, candles []Candle) error {
 	for _, p := range candles {
 		err := binary.Write(f, binary.LittleEndian, p)
 		if err != nil {
+			log.Panic(err)
 			return err
 		}
 	}
@@ -261,12 +291,13 @@ func ReadHistoryPositions(f io.Reader) (HistoryPositions, error) {
 	return ret, err
 }
 
-func WriteHistoryPositions(f io.Writer, position HistoryPositions) {
+func WriteHistoryPositions(f io.Writer, position HistoryPositions) error {
 	json, err := json.Marshal(position)
 	if err != nil {
-		log.Fatal(err)
+		log.Panic(err)
 	}
-	f.Write(json)
+	_, err = f.Write(json)
+	return err
 }
 
 // if err := cache.Set(symbol, *(*[]byte)(unsafe.Pointer(history))); err != nil {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -46,6 +47,8 @@ func priceHistory(w http.ResponseWriter, r *http.Request) {
 
 	exchange := strings.ToLower(chi.URLParam(r, "exchange"))
 	symbol := strings.ToLower(chi.URLParam(r, "symbol"))
+
+	fmt.Println(symbol)
 
 	start, err := strconv.ParseInt(r.URL.Query().Get("start"), 10, 64)
 	if err != nil {

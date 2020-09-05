@@ -22,7 +22,6 @@ type PriceClient struct {
 	Host                 string
 	Exchange             Exchange
 	OrderbookRefreshRate time.Duration
-	MaxCacheSize         MemoryMegabytes
 
 	orderbookPriceMap sync.Map
 	streamMap         sync.Map
