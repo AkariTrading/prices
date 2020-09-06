@@ -21,7 +21,7 @@ var upgrader = websocket.Upgrader{
 
 func main() {
 
-	err := binance.Init("TRY", "EUR")
+	err := binance.Init("TRY")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -62,6 +62,7 @@ func priceHistory(w http.ResponseWriter, r *http.Request) {
 		}
 		hist, err := binance.GetSymbolHistory(symbol, start)
 		if err != nil {
+			fmt.Println(err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}

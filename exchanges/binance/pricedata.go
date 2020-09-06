@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/akaritrading/prices/pkg/client"
@@ -31,7 +32,7 @@ const (
 )
 
 const (
-	SymbolSaveInitialTimestamp = 1598804620000 // make 0 for production
+	SymbolSaveInitialTimestamp = 0 // make 0 for production
 )
 
 type symbolFetchJob struct {
@@ -39,7 +40,7 @@ type symbolFetchJob struct {
 	Save   *client.HistoryPosition
 }
 
-func fetchKlines(symbol string, save *client.HistoryPosition) ([]client.Candle, error) {
+func fetchKlines(symbol string, pos *client.HistoryPosition) ([]client.Candle, error) {
 
 	if !CheckSymbol(symbol) {
 		return nil, ErrorSymbolNotFound
@@ -48,7 +49,7 @@ func fetchKlines(symbol string, save *client.HistoryPosition) ([]client.Candle, 
 	query := url.Values{}
 	query.Set("symbol", strings.ToUpper(symbol))
 	query.Set("interval", "1m")
-	query.Set("startTime", strconv.FormatInt(save.End, 10))
+	query.Set("startTime", strconv.FormatInt(pos.End, 10))
 	query.Set("limit", strconv.FormatInt(1000, 10))
 
 	url, _ := url.Parse("https://api.binance.com/api/v3/klines")
@@ -65,6 +66,7 @@ func fetchKlines(symbol string, save *client.HistoryPosition) ([]client.Candle, 
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
+		fmt.Println(res.StatusCode)
 		return nil, ErrorExchange
 	}
 
@@ -77,8 +79,9 @@ func fetchKlines(symbol string, save *client.HistoryPosition) ([]client.Candle, 
 
 	for _, candle := range data {
 
-		if save.Start == 0 {
-			save.Start = int64(candle[OPENTIME].(float64))
+		if pos.Start == 0 {
+			pos.Start = int64(candle[OPENTIME].(float64))
+			pos.End = int64(candle[OPENTIME].(float64))
 		}
 
 		high, _ := strconv.ParseFloat(candle[HIGH].(string), 64)
@@ -86,14 +89,6 @@ func fetchKlines(symbol string, save *client.HistoryPosition) ([]client.Candle, 
 		vol, _ := strconv.ParseFloat(candle[VOLUME].(string), 64)
 
 		candles = append(candles, client.Candle{Price: float64((high + low) / 2), Volume: vol})
-	}
-
-	if len(data) > 0 {
-		lastCandle := data[len(data)-1]
-		lock := symbolHistoryLocks[symbol]
-		lock.Lock()
-		save.End = int64(lastCandle[OPENTIME].(float64)) + (60 * 1000) // skip one minute
-		defer lock.Unlock()
 	}
 
 	return candles, nil
@@ -125,26 +120,23 @@ func fetchAndSave(jobs chan symbolFetchJob, wg *sync.WaitGroup) {
 
 	defer wg.Done()
 	for job := range jobs {
+		lock := symbolHistoryLocks[job.Symbol]
+		lock.Lock()
 
 		now := (time.Now().Unix() - (5 * 60)) * 1000 // roll back 5 minutes
 		var points []client.Candle
 
-		for job.Save.End <= now {
+		for atomic.LoadInt64(&job.Save.End) <= now {
 			candles, err := fetchKlines(job.Symbol, job.Save)
-			if err == nil {
-				if len(candles) == 0 {
-					break
-				}
-				points = append(points, candles...)
-			} else if err == ErrorExchange {
-				log.Fatal(err)
-				// TODO: log
-				return
-			} else {
-				log.Fatal(err)
-				// TODO: log
+			if err != nil {
+				fmt.Println(err)
+				break
 			}
+			atomic.AddInt64(&job.Save.End, int64(len(candles)*1000*60))
+			points = append(points, candles...)
 		}
+
+		fmt.Println(len(points))
 
 		f, err := os.OpenFile(fmt.Sprintf("/priceData/binance/prices/%s", job.Symbol), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 		if err != nil {
@@ -152,8 +144,6 @@ func fetchAndSave(jobs chan symbolFetchJob, wg *sync.WaitGroup) {
 		}
 		defer f.Close()
 
-		lock := symbolHistoryLocks[job.Symbol]
-		lock.Lock()
 		client.WriteCandles(f, points)
 		lock.Unlock()
 	}
@@ -171,6 +161,10 @@ func GetSymbolHistory(symbol string, start int64) (*client.History, error) {
 		return nil, err
 	}
 	defer f.Close()
+
+	s, _ := f.Stat()
+	fmt.Println("f size", s.Size())
+	fmt.Println("pos ", symbolHistoryPositions[symbol])
 
 	return client.HistoryWindow(f, symbolHistoryPositions[symbol], start, 0)
 }

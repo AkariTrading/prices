@@ -83,19 +83,21 @@ func (c *PriceClient) SymbolHistory(symbol string, start int64, end int64) (*His
 	fmt.Println("found ", ok)
 
 	if !ok {
-		err := c.fetchAndCacheFile(symbol, &HistoryPosition{})
+		updatedPos, err := c.fetchAndCacheFile(symbol, &HistoryPosition{})
 		if err != nil {
 			if err == ErrorSymbolNotFound {
 				delSymbolLock(symbol)
 			}
 			return nil, err
 		}
+		pos = updatedPos
 	} else {
 		if start > pos.End || end > pos.End {
-			err := c.fetchAndCacheFile(symbol, pos)
+			updatedPos, err := c.fetchAndCacheFile(symbol, pos)
 			if err != nil {
 				return nil, err
 			}
+			pos = updatedPos
 		}
 	}
 
@@ -104,32 +106,28 @@ func (c *PriceClient) SymbolHistory(symbol string, start int64, end int64) (*His
 		return nil, err
 	}
 
-	pos, _ = getPos(symbol)
-
-	fmt.Println("pos ", pos)
-
 	return HistoryWindow(priceFile, pos, start, end)
 }
 
 // assumes symbol is locked
-func (c *PriceClient) fetchAndCacheFile(symbol string, pos *HistoryPosition) error {
+func (c *PriceClient) fetchAndCacheFile(symbol string, pos *HistoryPosition) (*HistoryPosition, error) {
 
 	hist, candles, err := c.getData(symbol, pos.End)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	fmt.Println("hist.Start, hist.End ", hist.Start, hist.End)
 
 	priceFile, err := os.OpenFile(fmt.Sprintf("/symbolscache/binance/prices/%s", symbol), os.O_APPEND|os.O_CREATE, 0644)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer priceFile.Close()
 
 	posFile, err := os.OpenFile("/symbolscache/binance/symbols.json", os.O_CREATE, 0644)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer posFile.Close()
 
@@ -138,19 +136,21 @@ func (c *PriceClient) fetchAndCacheFile(symbol string, pos *HistoryPosition) err
 	}
 
 	savePos(symbol, &hist.HistoryPosition)
+
+	// the next calls need to be rolled back in the case of any error :(
 	err = WriteCandles(priceFile, candles)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	historyPositionLock.Lock()
 	defer historyPositionLock.Unlock()
 	err = WriteHistoryPositions(posFile, historyPositions)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	return &hist.HistoryPosition, nil
 }
 
 func getPos(symbol string) (*HistoryPosition, bool) {
@@ -258,7 +258,6 @@ func HistoryWindow(f *os.File, pos *HistoryPosition, start int64, end int64) (*H
 
 	candles := make([]Candle, (end-start)/millisecondsInMinute)
 	if err := binary.Read(f, binary.LittleEndian, candles); err != nil {
-		panic(err)
 		return nil, err
 	}
 
