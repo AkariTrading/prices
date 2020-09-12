@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/akaritrading/libs/stream"
+	"github.com/akaritrading/libs/util"
 	"github.com/gorilla/websocket"
 )
 
@@ -32,7 +33,7 @@ type aggTradeRaw struct {
 var streamMap sync.Map
 
 // WEBSOCKETHOST -url for binance websocket api
-var websockethost = "wss://stream.binance.com:9443/ws"
+var binanceWSHost = util.BinanceWSHost()
 
 // PriceStream -
 func PriceStream(symbol string) *stream.Stream {
@@ -46,7 +47,7 @@ func PriceStream(symbol string) *stream.Stream {
 
 	stream := stream.CreateStream()
 	streamMap.Store(symbol, stream)
-	go newConn(fmt.Sprintf("%s/%s%s", websockethost, symbol, "@aggTrade"), stream)
+	go newConn(fmt.Sprintf("%s/%s%s", binanceWSHost, symbol, "@aggTrade"), stream)
 	return stream
 }
 

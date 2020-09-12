@@ -2,7 +2,6 @@ package binance
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -14,12 +13,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/akaritrading/prices/pkg/client"
-)
-
-var (
-	ErrorSymbolNotFound = errors.New("ErrorSymbolNotFound")
-	ErrorExchange       = errors.New("ErrorExchange")
+	"github.com/akaritrading/libs/util"
+	"github.com/akaritrading/prices/pkg/pricesclient"
 )
 
 const (
@@ -31,19 +26,19 @@ const (
 	VOLUME          // string
 )
 
-const (
-	SymbolSaveInitialTimestamp = 0 // make 0 for production
+var (
+	SymbolSaveInitialTimestamp = time.Now().Add(-(time.Hour * 24 * 7)).Unix() * 1000 // make 0 for production
 )
 
 type symbolFetchJob struct {
 	Symbol string
-	Save   *client.HistoryPosition
+	Save   *pricesclient.HistoryPosition
 }
 
-func fetchKlines(symbol string, pos *client.HistoryPosition) ([]client.Candle, error) {
+func fetchKlines(symbol string, pos *pricesclient.HistoryPosition) ([]pricesclient.Candle, error) {
 
 	if !CheckSymbol(symbol) {
-		return nil, ErrorSymbolNotFound
+		return nil, util.ErrorSymbolNotFound
 	}
 
 	query := url.Values{}
@@ -67,7 +62,7 @@ func fetchKlines(symbol string, pos *client.HistoryPosition) ([]client.Candle, e
 
 	if res.StatusCode != http.StatusOK {
 		fmt.Println(res.StatusCode)
-		return nil, ErrorExchange
+		return nil, util.ErrorUnkown
 	}
 
 	var data [][]interface{}
@@ -75,7 +70,7 @@ func fetchKlines(symbol string, pos *client.HistoryPosition) ([]client.Candle, e
 		return nil, err
 	}
 
-	var candles []client.Candle
+	var candles []pricesclient.Candle
 
 	for _, candle := range data {
 
@@ -88,7 +83,7 @@ func fetchKlines(symbol string, pos *client.HistoryPosition) ([]client.Candle, e
 		low, _ := strconv.ParseFloat(candle[LOW].(string), 64)
 		vol, _ := strconv.ParseFloat(candle[VOLUME].(string), 64)
 
-		candles = append(candles, client.Candle{Price: float64((high + low) / 2), Volume: vol})
+		candles = append(candles, pricesclient.Candle{Price: float64((high + low) / 2), Volume: vol})
 	}
 
 	return candles, nil
@@ -124,7 +119,7 @@ func fetchAndSave(jobs chan symbolFetchJob, wg *sync.WaitGroup) {
 		lock.Lock()
 
 		now := (time.Now().Unix() - (5 * 60)) * 1000 // roll back 5 minutes
-		var points []client.Candle
+		var points []pricesclient.Candle
 
 		for atomic.LoadInt64(&job.Save.End) <= now {
 			candles, err := fetchKlines(job.Symbol, job.Save)
@@ -144,12 +139,12 @@ func fetchAndSave(jobs chan symbolFetchJob, wg *sync.WaitGroup) {
 		}
 		defer f.Close()
 
-		client.WriteCandles(f, points)
+		pricesclient.WriteCandles(f, points)
 		lock.Unlock()
 	}
 }
 
-func GetSymbolHistory(symbol string, start int64) (*client.History, error) {
+func GetSymbolHistory(symbol string, start int64) (*pricesclient.History, error) {
 
 	lock := symbolHistoryLocks[symbol]
 	lock.Lock()
@@ -166,5 +161,5 @@ func GetSymbolHistory(symbol string, start int64) (*client.History, error) {
 	fmt.Println("f size", s.Size())
 	fmt.Println("pos ", symbolHistoryPositions[symbol])
 
-	return client.HistoryWindow(f, symbolHistoryPositions[symbol], start, 0)
+	return pricesclient.HistoryWindow(f, symbolHistoryPositions[symbol], start, 0)
 }

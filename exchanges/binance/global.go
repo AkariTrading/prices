@@ -6,11 +6,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/akaritrading/prices/pkg/client"
+	"github.com/akaritrading/prices/pkg/pricesclient"
 )
 
 var symbolsMap map[string]bool
-var symbolHistoryPositions map[string]*client.HistoryPosition
+var symbolHistoryPositions map[string]*pricesclient.HistoryPosition
 var symbolHistoryLocks map[string]*sync.Mutex
 
 // Init -
@@ -25,7 +25,7 @@ func Init(allowedBasedAssets ...string) error {
 		symbolHistoryLocks[s] = &sync.Mutex{}
 	}
 
-	symbolHistoryPositions = make(map[string]*client.HistoryPosition)
+	symbolHistoryPositions = make(map[string]*pricesclient.HistoryPosition)
 
 	return priceHistoryJob()
 }
@@ -42,9 +42,9 @@ func priceHistoryJob() error {
 		if err != nil {
 			return err
 		}
-		symbolHistoryPositions = make(map[string]*client.HistoryPosition)
+		symbolHistoryPositions = make(map[string]*pricesclient.HistoryPosition)
 	} else {
-		saves, err := client.ReadHistoryPositions(f)
+		saves, err := pricesclient.ReadHistoryPositions(f)
 		f.Close()
 		if err != nil {
 			return err
@@ -69,14 +69,14 @@ func fetchJob() {
 
 	for {
 		fetchAndSaveAll()
-		client.WriteHistoryPositions(f, symbolHistoryPositions)
+		pricesclient.WriteHistoryPositions(f, symbolHistoryPositions)
 		time.Sleep(time.Hour)
 	}
 }
 
 func newSymbolSaves() {
 	for s := range symbolsMap {
-		symbolHistoryPositions[s] = &client.HistoryPosition{End: SymbolSaveInitialTimestamp}
+		symbolHistoryPositions[s] = &pricesclient.HistoryPosition{End: SymbolSaveInitialTimestamp}
 	}
 }
 
@@ -92,7 +92,7 @@ func syncExchangeSymbols() {
 	// adds missing symbols into symbol saves
 	for s := range symbolsMap {
 		if _, ok := symbolHistoryPositions[s]; !ok {
-			symbolHistoryPositions[s] = &client.HistoryPosition{End: SymbolSaveInitialTimestamp}
+			symbolHistoryPositions[s] = &pricesclient.HistoryPosition{End: SymbolSaveInitialTimestamp}
 		}
 	}
 
