@@ -21,7 +21,7 @@ func (c *Client) InitStream(symbol string) (*stream.Stream, error) {
 	return c.initStream(symbol)
 }
 
-// StreamRecentPrice - does not check if symbol is valid. PriceStream must be called first to initiate the stream.
+// StreamRecentPrice - does not check if symbol is valid. InitStream must be called first to initiate the stream.
 func (c *Client) StreamRecentPrice(symbol string) float64 {
 
 	if p, ok := c.streamPriceMap.Load(symbol); ok {
