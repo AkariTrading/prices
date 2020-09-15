@@ -61,7 +61,8 @@ func priceHistoryJob() error {
 
 func fetchJob() {
 
-	f, err := os.OpenFile("/priceData/binance/symbols.json", os.O_CREATE|os.O_WRONLY, 0770)
+	f, err := os.Create("/priceData/binance/symbols.json")
+
 	if err != nil {
 		log.Fatal(err)
 	}

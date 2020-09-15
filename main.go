@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/akaritrading/libs/util"
 	"github.com/akaritrading/prices/exchanges/binance"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
@@ -35,7 +36,6 @@ func main() {
 	r.Route("/{exchange}/history/{symbol}", func(newRoute chi.Router) {
 		// newRoute.Use(middleware.Compress(5))
 		newRoute.Get("/", priceHistory)
-
 	})
 
 	http.ListenAndServe(":8080", r)
@@ -48,11 +48,14 @@ func priceHistory(w http.ResponseWriter, r *http.Request) {
 	exchange := strings.ToLower(chi.URLParam(r, "exchange"))
 	symbol := strings.ToLower(chi.URLParam(r, "symbol"))
 
-	fmt.Println(symbol)
-
 	start, err := strconv.ParseInt(r.URL.Query().Get("start"), 10, 64)
 	if err != nil {
 		start = 0
+	}
+
+	maxSize, err := strconv.ParseInt(r.URL.Query().Get("maxSize"), 10, 64)
+	if err != nil {
+		maxSize = 0
 	}
 
 	if exchange == "binance" {
@@ -66,6 +69,9 @@ func priceHistory(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
+
+		hist.Prices = util.Downsample(hist.Prices, int(maxSize))
+		hist.Volumes = util.Downsample(hist.Volumes, int(maxSize))
 
 		bdy, err := json.Marshal(hist)
 		if err != nil {

@@ -146,6 +146,8 @@ func fetchAndSave(jobs chan symbolFetchJob, wg *sync.WaitGroup) {
 
 func GetSymbolHistory(symbol string, start int64) (*pricesclient.History, error) {
 
+	defer util.TimeTrack(time.Now(), "GetSymbolHistory")
+
 	lock := symbolHistoryLocks[symbol]
 	lock.Lock()
 	defer lock.Unlock()
@@ -156,10 +158,6 @@ func GetSymbolHistory(symbol string, start int64) (*pricesclient.History, error)
 		return nil, err
 	}
 	defer f.Close()
-
-	s, _ := f.Stat()
-	fmt.Println("f size", s.Size())
-	fmt.Println("pos ", symbolHistoryPositions[symbol])
 
 	return pricesclient.HistoryWindow(f, symbolHistoryPositions[symbol], start, 0)
 }

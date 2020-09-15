@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 	"unsafe"
 
 	"github.com/akaritrading/libs/util"
@@ -115,7 +116,7 @@ func (c *Client) SymbolHistory(symbol string, start int64, end int64) (*History,
 // assumes symbol is locked
 func (c *Client) fetchAndCacheFile(symbol string, pos *HistoryPosition) (*HistoryPosition, error) {
 
-	hist, candles, err := c.getData(symbol, pos.End)
+	hist, err := c.GetData(symbol, pos.End, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -128,14 +129,13 @@ func (c *Client) fetchAndCacheFile(symbol string, pos *HistoryPosition) (*Histor
 	}
 	defer priceFile.Close()
 
-	posFile, err := os.OpenFile("/symbolscache/binance/symbols.json", os.O_CREATE, 0644)
-	if err != nil {
-		return nil, err
-	}
-	defer posFile.Close()
-
 	if pos.Start != 0 {
 		hist.Start = pos.Start
+	}
+
+	candles := make([]Candle, 0, len(hist.Prices))
+	for i := range hist.Prices {
+		candles = append(candles, Candle{Price: hist.Prices[i], Volume: hist.Volumes[i]})
 	}
 
 	savePos(symbol, &hist.HistoryPosition)
@@ -148,6 +148,13 @@ func (c *Client) fetchAndCacheFile(symbol string, pos *HistoryPosition) (*Histor
 
 	historyPositionLock.Lock()
 	defer historyPositionLock.Unlock()
+
+	posFile, err := os.Create("/symbolscache/binance/symbols.json")
+	if err != nil {
+		return nil, err
+	}
+	defer posFile.Close()
+
 	err = WriteHistoryPositions(posFile, historyPositions)
 	if err != nil {
 		return nil, err
@@ -202,29 +209,25 @@ func delSymbolLock(symbol string) {
 	delete(symbolLocks, symbol)
 }
 
-func (c *Client) getData(symbol string, start int64) (*History, []Candle, error) {
+func (c *Client) GetData(symbol string, start int64, maxSize int64) (*History, error) {
 
-	body, err := getRequest(fmt.Sprintf("http://%s/%s/history/%s?start=%d", c.Host, c.Exchange, symbol, start))
+	body, err := getRequest(fmt.Sprintf("http://%s/%s/history/%s?start=%d&maxSize=%d", c.Host, c.Exchange, symbol, start, maxSize))
 	if err != nil {
-
-		return nil, nil, err
+		return nil, err
 	}
 
 	var history History
 	err = json.Unmarshal(body, &history)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	candles := make([]Candle, 0, len(history.Prices))
-	for i := range history.Prices {
-		candles = append(candles, Candle{Price: history.Prices[i], Volume: history.Volumes[i]})
-	}
-
-	return &history, candles, nil
+	return &history, nil
 }
 
 func HistoryWindow(f *os.File, pos *HistoryPosition, start int64, end int64) (*History, error) {
+
+	defer util.TimeTrack(time.Now(), "HistoryWindow")
 
 	var millisecondsInMinute int64 = 60 * 1000
 
