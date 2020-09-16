@@ -2,17 +2,17 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
 
+	"github.com/akaritrading/libs/log"
 	"github.com/akaritrading/libs/util"
 	"github.com/akaritrading/prices/exchanges/binance"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/gorilla/websocket"
+	"github.com/pkg/errors"
 )
 
 var upgrader = websocket.Upgrader{
@@ -20,11 +20,13 @@ var upgrader = websocket.Upgrader{
 	WriteBufferSize: 1024,
 }
 
+var logger = log.New("prices")
+
 func main() {
 
 	err := binance.Init("TRY")
 	if err != nil {
-		log.Fatal(err)
+		logger.Fatal(errors.WithStack(err))
 	}
 
 	r := chi.NewRouter()
@@ -65,7 +67,7 @@ func priceHistory(w http.ResponseWriter, r *http.Request) {
 		}
 		hist, err := binance.GetSymbolHistory(symbol, start)
 		if err != nil {
-			fmt.Println(err)
+			logger.Error(errors.WithStack(err))
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -75,6 +77,7 @@ func priceHistory(w http.ResponseWriter, r *http.Request) {
 
 		bdy, err := json.Marshal(hist)
 		if err != nil {
+			logger.Error(errors.WithStack(err))
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -116,6 +119,7 @@ func pricesWebsocket(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 
 		if err != nil {
+			logger.Error(errors.WithStack(err))
 			return
 		}
 
@@ -133,6 +137,7 @@ func pricesWebsocket(w http.ResponseWriter, r *http.Request) {
 			val, _ := sub.Read()
 			err = conn.WriteJSON(val)
 			if err != nil {
+				logger.Error(errors.WithStack(err))
 				sub.Unsubscribe()
 				return
 			}

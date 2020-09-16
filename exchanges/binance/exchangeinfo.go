@@ -1,8 +1,9 @@
 package binance
 
 import (
-	"errors"
 	"strings"
+
+	"github.com/pkg/errors"
 )
 
 // ExchangeInfo exchange info

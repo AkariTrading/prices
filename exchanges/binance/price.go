@@ -2,7 +2,7 @@ package binance
 
 import (
 	"encoding/json"
-	"errors"
+
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/akaritrading/libs/util"
+	"github.com/pkg/errors"
 )
 
 type orderbook struct {
@@ -78,7 +79,7 @@ func httpGETJson(url string, obj interface{}) error {
 	}
 
 	if res.StatusCode != http.StatusOK {
-		return errors.New("")
+		return errors.New("httpGETJson is not ")
 	}
 
 	return json.Unmarshal(bdy, &obj)

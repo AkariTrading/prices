@@ -1,12 +1,12 @@
 package pricesclient
 
 import (
-	"errors"
 	"io/ioutil"
 	"net/http"
 	"time"
 
 	"github.com/akaritrading/libs/util"
+	"github.com/pkg/errors"
 )
 
 var client = http.Client{

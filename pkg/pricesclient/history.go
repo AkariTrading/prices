@@ -3,7 +3,6 @@ package pricesclient
 import (
 	"encoding/binary"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -14,6 +13,7 @@ import (
 	"unsafe"
 
 	"github.com/akaritrading/libs/util"
+	"github.com/pkg/errors"
 )
 
 var ErrorDateRange = errors.New("date range error")
