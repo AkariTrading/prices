@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"strings"
 	"sync"
@@ -280,7 +279,6 @@ func WriteCandles(f io.Writer, candles []Candle) error {
 	for _, p := range candles {
 		err := binary.Write(f, binary.LittleEndian, p)
 		if err != nil {
-			log.Panic(err)
 			return err
 		}
 	}
@@ -297,7 +295,7 @@ func ReadHistoryPositions(f io.Reader) (HistoryPositions, error) {
 func WriteHistoryPositions(f io.Writer, position HistoryPositions) error {
 	json, err := json.Marshal(position)
 	if err != nil {
-		log.Panic(err)
+		return err
 	}
 	_, err = f.Write(json)
 	return err

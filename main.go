@@ -3,14 +3,14 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
-	"github.com/akaritrading/libs/log"
+	"github.com/akaritrading/libs/middleware"
 	"github.com/akaritrading/libs/util"
 	"github.com/akaritrading/prices/exchanges/binance"
 	"github.com/go-chi/chi"
-	"github.com/go-chi/chi/middleware"
 	"github.com/gorilla/websocket"
 	"github.com/pkg/errors"
 )
@@ -20,18 +20,17 @@ var upgrader = websocket.Upgrader{
 	WriteBufferSize: 1024,
 }
 
-var logger = log.New("prices")
-
 func main() {
 
 	err := binance.Init("TRY")
 	if err != nil {
-		logger.Fatal(errors.WithStack(err))
+		// TODO: log
+		os.Exit(1)
 	}
 
 	r := chi.NewRouter()
+	r.Use(middleware.RequestLogger("prices"))
 	r.Use(middleware.Recoverer)
-	r.Use(middleware.DefaultLogger)
 	r.Get("/{exchange}/priceStream/{symbol}", pricesWebsocket)
 	r.Get("/{exchange}/orderbookPrice/{symbol}", orderbookPrice)
 
@@ -46,6 +45,8 @@ func main() {
 func priceHistory(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
+
+	logger := middleware.GetLogger(r)
 
 	exchange := strings.ToLower(chi.URLParam(r, "exchange"))
 	symbol := strings.ToLower(chi.URLParam(r, "symbol"))
@@ -106,6 +107,8 @@ func orderbookPrice(w http.ResponseWriter, r *http.Request) {
 }
 
 func pricesWebsocket(w http.ResponseWriter, r *http.Request) {
+
+	logger := middleware.GetLogger(r)
 
 	symbol := strings.ToLower(chi.URLParam(r, "symbol"))
 	exchange := strings.ToLower(chi.URLParam(r, "exchange"))
