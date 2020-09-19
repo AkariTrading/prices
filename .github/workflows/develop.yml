@@ -29,6 +29,7 @@ jobs:
     - name: Build
       run: |-
         go env -w GOPRIVATE=github.com/akaritrading/*
+        go mod download
         go build
 
     - name: Test
