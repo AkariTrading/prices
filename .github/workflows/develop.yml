@@ -47,7 +47,7 @@ jobs:
 
     - name: Docker Build
       run: |-
-          docker build --tag "gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA" .
+          docker build --build-arg GH_TOKEN=$GH_TOKEN --tag "gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA" .
 
     - name: Publish
       run: |-
