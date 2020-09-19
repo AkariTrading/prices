@@ -9,6 +9,7 @@ on:
 env:
   PROJECT_ID: ${{ secrets.GCLOUD_PROJECT_ID }}
   IMAGE: ${{ github.event.repository.name }}
+  GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
 jobs:
 

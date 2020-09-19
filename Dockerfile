@@ -2,9 +2,8 @@ FROM golang:1.14
 
 WORKDIR /go/src/app
 COPY . .
-ENV USER_EMAIL vaxkbihm@sharklasers.com
-ENV USER_PASSWORD password
 
+RUN git config --global url."https://${GH_TOKEN}:x-oauth-basic@github.com/".insteadOf "https://github.com/"
 RUN go build
 
 CMD ["./app"]
