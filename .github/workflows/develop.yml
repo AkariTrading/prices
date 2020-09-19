@@ -36,6 +36,10 @@ jobs:
     - name: Test
       run: go test ./...
 
+    - name: Docker Build
+      run: |-
+          docker build --build-arg GH_TOKEN=$GH_TOKEN --tag "gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA" .
+
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCLOUD_SA_KEY }}
@@ -45,10 +49,6 @@ jobs:
       run: |-
         gcloud --quiet auth configure-docker
 
-    - name: Docker Build
-      run: |-
-          docker build --build-arg GH_TOKEN=$GH_TOKEN --tag "gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA" .
-
     - name: Publish
       run: |-
-          docker push "gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA"
+        docker push "gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA"
