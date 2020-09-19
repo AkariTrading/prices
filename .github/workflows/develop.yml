@@ -29,6 +29,7 @@ jobs:
     - name: Build
       run: |-
         go env -w GOPRIVATE=github.com/akaritrading/*
+        git config --global url."https://${{ secrets.GH_TOKEN }}:x-oauth-basic@github.com/".insteadOf "https://github.com/"
         go mod download
         go build
 
