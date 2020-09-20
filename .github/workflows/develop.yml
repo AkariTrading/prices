@@ -59,14 +59,6 @@ jobs:
 
 
     # START Deployment and System Tests
-    - name: "Checkout systemtestsrunner"
-      uses: actions/checkout@v2
-      with:
-        repository: akaritrading/systemtestsrunner
-        ref: v0.0.1
-        token: ${{ secrets.GH_TOKEN }} # stored in GitHub secrets
-        path: systemtestsrunner
-
     - name: "Checkout config"
       uses: actions/checkout@v2
       with:
@@ -74,6 +66,7 @@ jobs:
         ref: v0.0.1
         token: ${{ secrets.GH_TOKEN }} # stored in GitHub secrets
         path: docker_config
+      run: git checkout master
 
     - name: "Deploy"
       run: |-
@@ -92,4 +85,5 @@ jobs:
     - name: "Run Tests"
       run: |-
         cd systemtestsrunner
+        git checkout master
         go build && systemtestsrunner
