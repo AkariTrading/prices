@@ -69,8 +69,8 @@ jobs:
     - name: "Deploy to manager instance"
       run: |-
         echo $SYSTEM_VARIABLES > docker_config/.env
-        gcloud compute scp --recurse --zone us-central1-a docker_config f1-template-1: 
-        gcloud compute ssh --zone us-central1-a f1-template-1 --command="export PROJECT_ID=$PROJECT_ID && sudo docker-compose -f ./docker_config/docker-compose-dev.yml"
+        gcloud compute scp --recurse --zone us-central1-a docker_config f1-template-1:~
+        gcloud compute ssh --zone us-central1-a f1-template-1 --command="cd docker_config && export PROJECT_ID=$PROJECT_ID && sudo docker-compose -f ./docker_config/docker-compose-dev.yml"
 
     - name: "Checkout systemtestsrunner"
       uses: actions/checkout@v2
