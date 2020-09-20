@@ -83,5 +83,4 @@ jobs:
     - name: "Run Tests"
       run: |-
         cd systemtestsrunner
-        git checkout master
         go build && systemtestsrunner
