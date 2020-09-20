@@ -31,18 +31,18 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v2
 
-    - name: Build
-      run: |-
-        go env -w GOPRIVATE=github.com/akaritrading/*
-        git config --global url."https://${{ secrets.GH_TOKEN }}:x-oauth-basic@github.com/".insteadOf "https://github.com/"
-        go build
+    # - name: Build
+    #   run: |-
+    #     go env -w GOPRIVATE=github.com/akaritrading/*
+    #     git config --global url."https://${{ secrets.GH_TOKEN }}:x-oauth-basic@github.com/".insteadOf "https://github.com/"
+    #     go build
 
-    - name: Test
-      run: go test ./...
+    # - name: Test
+    #   run: go test ./...
 
-    - name: Docker Build
-      run: |-
-          docker build --build-arg GH_TOKEN=$GH_TOKEN --tag "gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA" .
+    # - name: Docker Build
+    #   run: |-
+    #       docker build --build-arg GH_TOKEN=$GH_TOKEN --tag "gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA" .
 
     - name: "Set up gcloud"
       uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
