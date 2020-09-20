@@ -70,6 +70,7 @@ jobs:
     - name: "Deploy to manager instance"
       run: |-
         echo $SYSTEM_VARIABLES > docker_config/.env
+        gcloud compute ssh --project mudding-285403 --zone us-central1-a f1-template-1 --command="rm -rf docker_config"
         gcloud compute scp --recurse --project mudding-285403 --zone us-central1-a docker_config f1-template-1:~
         gcloud compute ssh --project mudding-285403 --zone us-central1-a f1-template-1 --command="cd docker_config && sudo docker-compose -f docker-compose-dev.yml"
 
