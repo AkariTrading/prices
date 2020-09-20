@@ -44,7 +44,8 @@ jobs:
       run: |-
           docker build --build-arg GH_TOKEN=$GH_TOKEN --tag "gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA" .
 
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - name: "Set up gcloud"
+      uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCLOUD_SA_KEY }}
         project_id: ${{ secrets.GCLOUD_PROJECT_ID }}
@@ -53,21 +54,19 @@ jobs:
       run: |-
         gcloud --quiet auth configure-docker
 
-    - name: Publish
+    - name: Publish image
       run: |-
         docker push "gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA"
-
 
     # START Deployment and System Tests
     - name: "Checkout config"
       uses: actions/checkout@v2
       with:
         repository: akaritrading/config
-        ref: v0.0.1
         token: ${{ secrets.GH_TOKEN }} # stored in GitHub secrets
         path: docker_config
 
-    - name: "Deploy"
+    - name: "Deploy to manager instance"
       run: |-
         echo $SYSTEM_VARIABLES > docker_config/.env
         gcloud compute scp --recurse docker_config f1-template-1: 
