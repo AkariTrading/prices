@@ -55,9 +55,9 @@ jobs:
       run: |-
         gcloud --quiet auth configure-docker
 
-    - name: Publish image
-      run: |-
-        docker push "gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA"
+    # - name: Publish image
+    #   run: |-
+    #     docker push "gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA"
 
     # START Deployment and System Tests
     - name: "Checkout config"
