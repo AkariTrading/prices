@@ -1,9 +1,7 @@
-name: Build, Test, Publish Image
+name: Build, Test, and Upload Image
 
 on:
   push:
-    branches: [ develop ]
-  pull_request:
     branches: [ develop ]
 
 env:
@@ -11,78 +9,32 @@ env:
   IMAGE: ${{ github.event.repository.name }}
   GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
-  SYSTEM_TESTS_HOST: ${{ secrets.SYSTEM_TESTS_HOST }}
-  MANAGER_NAME: ${{ secrets.MANAGER_NAME }}
-  SYSTEM_VARIABLES: ${{ secrets.SYSTEM_VARIABLES }}
-
 jobs:
 
-  build-test-publish:
-    name: Build
+  build-publish:
+    name: Build, Test, and Push Image
     runs-on: ubuntu-latest
+
     steps:
-
-    - name: Set up Go 1.4
-      uses: actions/setup-go@v2
-      with:
-        go-version: 1.14
-      id: go
-
     - name: Checkout
       uses: actions/checkout@v2
-
-    # - name: Build
-    #   run: |-
-    #     go env -w GOPRIVATE=github.com/akaritrading/*
-    #     git config --global url."https://${{ secrets.GH_TOKEN }}:x-oauth-basic@github.com/".insteadOf "https://github.com/"
-    #     go build
-
-    # - name: Test
-    #   run: go test ./...
-
-    # - name: Docker Build
-    #   run: |-
-    #       docker build --build-arg GH_TOKEN=$GH_TOKEN --tag "gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA" .
 
     - name: "Set up gcloud"
       uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCLOUD_SA_KEY }}
         project_id: ${{ secrets.GCLOUD_PROJECT_ID }}
-        export_default_credentials: true
         
     - name: Authenticate with gcloud
       run: |-
         gcloud --quiet auth configure-docker
 
-    # - name: Publish image
-    #   run: |-
-    #     docker push "gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA"
-
-    # START Deployment and System Tests
-    - name: "Checkout config"
-      uses: actions/checkout@v2
-      with:
-        repository: akaritrading/config
-        token: ${{ secrets.GH_TOKEN }} # stored in GitHub secrets
-        path: docker_config
-
-    - name: "Deploy to manager instance"
+    # Build the Docker image
+    - name: Build Image
       run: |-
-        echo $SYSTEM_VARIABLES > docker_config/.env
-        gcloud compute ssh --project mudding-285403 --zone us-central1-a f1-template-1 --command="rm -rf docker_config"
-        gcloud compute scp --recurse --project mudding-285403 --zone us-central1-a docker_config f1-template-1:~
-        gcloud compute ssh --project mudding-285403 --zone us-central1-a f1-template-1 --command="cd docker_config && sudo docker-compose -f docker-compose-dev.yml"
+        docker build --build-arg GH_TOKEN=$GH_TOKEN --tag "gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA" .
 
-    - name: "Checkout systemtestsrunner"
-      uses: actions/checkout@v2
-      with:
-        repository: akaritrading/systemtestsrunner
-        ref: v0.0.1
-        token: ${{ secrets.GH_TOKEN }} # stored in GitHub secrets
-        path: systemtestsrunner
-
-    - name: "Run Tests"
+    # Push the Docker image to Google Container Registry
+    - name: Push Image
       run: |-
-        cd systemtestsrunner
-        go build && systemtestsrunner
+        docker push "gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA"
