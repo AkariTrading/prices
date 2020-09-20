@@ -11,6 +11,10 @@ env:
   IMAGE: ${{ github.event.repository.name }}
   GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
+  SYSTEM_TESTS_HOST: ${{ secrets.SYSTEM_TESTS_HOST }}
+  MANAGER_NAME: ${{ secrets.MANAGER_NAME }}
+  SYSTEM_VARIABLES: ${{ secrets.SYSTEM_VARIABLES }}
+
 jobs:
 
   build-test-publish:
@@ -52,3 +56,40 @@ jobs:
     - name: Publish
       run: |-
         docker push "gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA"
+
+
+    # START Deployment and System Tests
+    - name: "Checkout systemtestsrunner"
+      uses: actions/checkout@v2
+      with:
+        repository: akaritrading/systemtestsrunner
+        ref: v0.0.1
+        token: ${{ secrets.GH_TOKEN }} # stored in GitHub secrets
+        path: systemtestsrunner
+
+    - name: "Checkout config"
+      uses: actions/checkout@v2
+      with:
+        repository: akaritrading/config
+        ref: v0.0.1
+        token: ${{ secrets.GH_TOKEN }} # stored in GitHub secrets
+        path: docker_config
+
+    - name: "Deploy"
+      run: |-
+        echo $SYSTEM_VARIABLES > docker_config/.env
+        gcloud compute scp --recurse docker_config f1-template-1: 
+        gcloud compute ssh $MANAGER_NAME --command="docker-compose -f ./docker_config/docker-compose.yml"
+
+    - name: "Checkout systemtestsrunner"
+      uses: actions/checkout@v2
+      with:
+        repository: akaritrading/systemtestsrunner
+        ref: v0.0.1
+        token: ${{ secrets.GH_TOKEN }} # stored in GitHub secrets
+        path: systemtestsrunner
+
+    - name: "Run Tests"
+      run: |-
+        cd systemtestsrunner
+        go build && systemtestsrunner
