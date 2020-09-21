@@ -41,7 +41,6 @@ func PriceStream(symbol string) *stream.Stream {
 	loadedStream, ok := streamMap.Load(symbol)
 
 	if ok {
-		fmt.Println("FROM CACHE")
 		return loadedStream.(*stream.Stream)
 	}
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"strconv"
@@ -33,6 +34,8 @@ func main() {
 	r.Use(middleware.Recoverer)
 	r.Get("/{exchange}/priceStream/{symbol}", pricesWebsocket)
 	r.Get("/{exchange}/orderbookPrice/{symbol}", orderbookPrice)
+
+	// r.Get("/{exchange}/symbols", symbolHandle)
 
 	r.Route("/{exchange}/history/{symbol}", func(newRoute chi.Router) {
 		// newRoute.Use(middleware.Compress(5))
@@ -88,6 +91,7 @@ func priceHistory(w http.ResponseWriter, r *http.Request) {
 }
 
 func orderbookPrice(w http.ResponseWriter, r *http.Request) {
+
 	symbol := strings.ToLower(chi.URLParam(r, "symbol"))
 	exchange := strings.ToLower(chi.URLParam(r, "exchange"))
 
@@ -100,6 +104,7 @@ func orderbookPrice(w http.ResponseWriter, r *http.Request) {
 		price, _ := binance.OrderBookPrice(symbol)
 		js, _ := json.Marshal(price)
 		w.Write(js)
+		return
 	}
 
 	w.WriteHeader(http.StatusNotFound)
@@ -112,6 +117,9 @@ func pricesWebsocket(w http.ResponseWriter, r *http.Request) {
 
 	symbol := strings.ToLower(chi.URLParam(r, "symbol"))
 	exchange := strings.ToLower(chi.URLParam(r, "exchange"))
+
+	fmt.Println("symbol ", symbol)
+	fmt.Println("exchange ", exchange)
 
 	if exchange == "binance" {
 		if !binance.CheckSymbol(symbol) {
@@ -130,11 +138,7 @@ func pricesWebsocket(w http.ResponseWriter, r *http.Request) {
 
 		stream := binance.PriceStream(symbol)
 		sub := stream.Subscribe(1)
-
-		conn.SetCloseHandler(func(code int, text string) error {
-			sub.Unsubscribe()
-			return nil
-		})
+		defer sub.Unsubscribe()
 
 		for {
 			val, _ := sub.Read()
@@ -150,3 +154,16 @@ func pricesWebsocket(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotFound)
 	return
 }
+
+// func symbolHandle(w http.ResponseWriter, r *http.Request) {
+
+// 	exchange := strings.ToLower(chi.URLParam(r, "exchange"))
+
+// 	if exchange == "binance" {
+
+// 		binance.Symbols()
+
+// 		return
+// 	}
+
+// }

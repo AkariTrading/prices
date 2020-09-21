@@ -9,13 +9,13 @@ import (
 	"github.com/akaritrading/prices/pkg/pricesclient"
 )
 
-var symbolsMap map[string]bool
+var symbolsMap map[string]Symbol
 var symbolHistoryPositions map[string]*pricesclient.HistoryPosition
 var symbolHistoryLocks map[string]*sync.Mutex
 
 // Init -
 func Init(allowedBasedAssets ...string) error {
-	if err := initSymbols(allowedBasedAssets...); err != nil {
+	if err := InitSymbols(allowedBasedAssets...); err != nil {
 		return err
 	}
 

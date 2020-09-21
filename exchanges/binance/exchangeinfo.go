@@ -44,8 +44,8 @@ func CheckSymbol(s string) bool {
 	return ok
 }
 
-func initSymbols(symbolSuffixes ...string) error {
-	info, err := exchangeinfo()
+func InitSymbols(symbolSuffixes ...string) error {
+	info, err := Exchangeinfo()
 	if err != nil {
 		return err
 	}
@@ -53,7 +53,7 @@ func initSymbols(symbolSuffixes ...string) error {
 	// 	fmt.Println(val.Status, val.BaseAsset, val.Symbol, val.IsSpotTradingAllowed, val.OrderTypes)
 	// }
 
-	symbolsMap = info.symbolNamesMap(symbolSuffixes...)
+	symbolsMap = info.SymbolNamesMap(symbolSuffixes...)
 
 	if len(symbolsMap) == 0 {
 		return errors.New("could not fetch symbols")
@@ -62,7 +62,7 @@ func initSymbols(symbolSuffixes ...string) error {
 	return nil
 }
 
-func exchangeinfo() (*ExchangeInfo, error) {
+func Exchangeinfo() (*ExchangeInfo, error) {
 
 	var data ExchangeInfo
 	err := httpGETJson("https://api.binance.com/api/v3/exchangeInfo", &data)
@@ -75,12 +75,12 @@ func exchangeinfo() (*ExchangeInfo, error) {
 }
 
 // SymbolNames -
-func (ex *ExchangeInfo) symbolNamesMap(suffixes ...string) map[string]bool {
-	tmp := make(map[string]bool)
+func (ex *ExchangeInfo) SymbolNamesMap(suffixes ...string) map[string]Symbol {
+	tmp := make(map[string]Symbol)
 	for _, s := range ex.Symbols {
 		for _, suffix := range suffixes {
 			if s.Status == "TRADING" && s.IsSpotTradingAllowed && s.QuoteAsset == suffix {
-				tmp[strings.ToLower(s.Symbol)] = true
+				tmp[strings.ToLower(s.Symbol)] = s
 				break
 			}
 		}
