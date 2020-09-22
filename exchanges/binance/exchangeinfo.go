@@ -44,6 +44,10 @@ func CheckSymbol(s string) bool {
 	return ok
 }
 
+func Symbols() map[string]Symbol {
+	return symbolsMap
+}
+
 func InitSymbols(symbolSuffixes ...string) error {
 	info, err := Exchangeinfo()
 	if err != nil {
