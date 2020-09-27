@@ -8,7 +8,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"time"
 	"unsafe"
 
 	"github.com/akaritrading/libs/util"
@@ -17,31 +16,7 @@ import (
 
 var ErrorDateRange = errors.New("date range error")
 
-type Candle struct {
-	Price  float64
-	Volume float64
-}
-
-type HistoryPosition struct {
-	Start int64
-	End   int64
-}
-
-type HistoryPositions map[string]*HistoryPosition
-
-var historyPositions HistoryPositions
-var historyPositionLock sync.Mutex
-
-var symbolLocks map[string]*sync.Mutex
-var symbolLock sync.Mutex
-
-type History struct {
-	HistoryPosition
-	Prices  []float64
-	Volumes []float64
-}
-
-func (c *Client) InitHistory() error {
+func (c *Client) InitHistoryFileCache() error {
 
 	if symbolLocks == nil {
 		symbolLocks = make(map[string]*sync.Mutex)
@@ -109,15 +84,19 @@ func (c *Client) SymbolHistory(symbol string, start int64, end int64) (*History,
 		return nil, err
 	}
 
-	return HistoryWindow(priceFile, pos, start, end)
+	return ReadHistoryWindow(priceFile, pos, start, end)
 }
 
-// assumes symbol is locked
+// warning - assumes symbol is locked
 func (c *Client) fetchAndCacheFile(symbol string, pos *HistoryPosition) (*HistoryPosition, error) {
 
-	hist, err := c.GetData(symbol, pos.End, 0)
+	hist, err := c.GetHistory(symbol, pos.End, 0)
 	if err != nil {
 		return nil, err
+	}
+
+	if len(hist.Candles) == 0 {
+		return &hist.HistoryPosition, nil
 	}
 
 	fmt.Println("hist.Start, hist.End ", hist.Start, hist.End)
@@ -127,20 +106,16 @@ func (c *Client) fetchAndCacheFile(symbol string, pos *HistoryPosition) (*Histor
 		return nil, err
 	}
 	defer priceFile.Close()
+	defer priceFile.Sync()
 
 	if pos.Start != 0 {
 		hist.Start = pos.Start
 	}
 
-	candles := make([]Candle, 0, len(hist.Prices))
-	for i := range hist.Prices {
-		candles = append(candles, Candle{Price: hist.Prices[i], Volume: hist.Volumes[i]})
-	}
-
 	savePos(symbol, &hist.HistoryPosition)
 
 	// the next calls need to be rolled back in the case of any error :(
-	err = WriteCandles(priceFile, candles)
+	err = WriteCandles(priceFile, hist.ToHistory().Candles)
 	if err != nil {
 		return nil, err
 	}
@@ -153,6 +128,7 @@ func (c *Client) fetchAndCacheFile(symbol string, pos *HistoryPosition) (*Histor
 		return nil, err
 	}
 	defer posFile.Close()
+	defer posFile.Sync()
 
 	err = WriteHistoryPositions(posFile, historyPositions)
 	if err != nil {
@@ -208,14 +184,14 @@ func delSymbolLock(symbol string) {
 	delete(symbolLocks, symbol)
 }
 
-func (c *Client) GetData(symbol string, start int64, maxSize int64) (*History, error) {
+func (c *Client) GetHistory(symbol string, start int64, maxSize int64) (*HistoryResponse, error) {
 
 	body, err := getRequest(fmt.Sprintf("http://%s/%s/history/%s?start=%d&maxSize=%d", c.Host, c.Exchange, symbol, start, maxSize))
 	if err != nil {
 		return nil, err
 	}
 
-	var history History
+	var history HistoryResponse
 	err = json.Unmarshal(body, &history)
 	if err != nil {
 		return nil, err
@@ -224,9 +200,9 @@ func (c *Client) GetData(symbol string, start int64, maxSize int64) (*History, e
 	return &history, nil
 }
 
-func HistoryWindow(f *os.File, pos *HistoryPosition, start int64, end int64) (*History, error) {
+func ReadHistoryWindow(f *os.File, pos *HistoryPosition, start int64, end int64) (*History, error) {
 
-	defer util.TimeTrack(time.Now(), "HistoryWindow")
+	// defer util.TimeTrack(time.Now(), "HistoryWindow")
 
 	var millisecondsInMinute int64 = 60 * 1000
 
@@ -264,15 +240,7 @@ func HistoryWindow(f *os.File, pos *HistoryPosition, start int64, end int64) (*H
 		return nil, err
 	}
 
-	prices := make([]float64, 0, len(candles))
-	volumes := make([]float64, 0, len(candles))
-
-	for _, c := range candles {
-		prices = append(prices, c.Price)
-		volumes = append(volumes, c.Volume)
-	}
-
-	return &History{HistoryPosition: HistoryPosition{Start: start, End: end}, Prices: prices, Volumes: volumes}, nil
+	return &History{HistoryPosition: HistoryPosition{Start: start, End: end}, Candles: candles}, nil
 }
 
 func WriteCandles(f io.Writer, candles []Candle) error {

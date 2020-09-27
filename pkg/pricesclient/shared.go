@@ -3,6 +3,7 @@ package pricesclient
 import (
 	"io/ioutil"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/akaritrading/libs/util"
@@ -11,6 +12,30 @@ import (
 
 var client = http.Client{
 	Timeout: time.Second * 10,
+}
+
+const (
+	Binance string = "binance"
+)
+
+type MemoryMegabytes int
+
+type Client struct {
+	Host                 string
+	Exchange             string
+	OrderbookRefreshRate time.Duration
+
+	orderbookPriceMap sync.Map
+	streamMap         sync.Map
+	streamPriceMap    sync.Map
+}
+
+func (c *Client) ToSymbol(symbolA string, symbolB string) string {
+	if c.Exchange == Binance {
+		return symbolA + symbolB
+	}
+
+	return symbolA + symbolB
 }
 
 func getRequest(url string) ([]byte, error) {
@@ -30,4 +55,109 @@ func getRequest(url string) ([]byte, error) {
 	}
 
 	return ioutil.ReadAll(res.Body)
+}
+
+// DO NOT TOUCH
+type Candle struct {
+	Open   float64
+	High   float64
+	Low    float64
+	Close  float64
+	Volume float64
+}
+
+type HistoryPosition struct {
+	Start int64
+	End   int64
+}
+
+type HistoryPositions map[string]*HistoryPosition
+
+var historyPositions HistoryPositions
+var historyPositionLock sync.Mutex
+
+var symbolLocks map[string]*sync.Mutex
+var symbolLock sync.Mutex
+
+type History struct {
+	HistoryPosition
+	Candles []Candle
+}
+
+type HistoryResponse struct {
+	HistoryPosition
+	Candles [][]float64
+}
+
+func (h *HistoryResponse) ToHistory() *History {
+
+	candles := make([]Candle, 0, len(h.Candles)/5)
+
+	for _, arr := range h.Candles {
+
+		candles = append(candles, Candle{
+			Open:   arr[0],
+			High:   arr[1],
+			Low:    arr[2],
+			Close:  arr[3],
+			Volume: arr[4],
+		})
+	}
+
+	return &History{
+		HistoryPosition: HistoryPosition{
+			Start: h.Start,
+			End:   h.End,
+		},
+		Candles: candles,
+	}
+}
+
+func (h *History) ToResponse() *HistoryResponse {
+
+	ret := &HistoryResponse{
+		HistoryPosition: HistoryPosition{
+			Start: h.Start,
+			End:   h.End,
+		},
+	}
+
+	for _, c := range h.Candles {
+		ret.Candles = append(ret.Candles, []float64{c.Open, c.High, c.Low, c.Close, c.Volume})
+	}
+
+	return ret
+
+}
+
+func (h *History) Volumes() []float64 {
+
+	ret := make([]float64, 0, len(h.Candles))
+
+	for _, c := range h.Candles {
+		ret = append(ret, c.Volume)
+	}
+
+	return ret
+}
+
+func (h *History) Downsample(maxSize int) []Candle {
+
+	if maxSize == 0 {
+		return h.Candles
+	}
+
+	if len(h.Candles) <= maxSize {
+		return h.Candles
+	}
+
+	sampleRate := float64(len(h.Candles)) / float64(maxSize)
+
+	ret := make([]Candle, 0, maxSize)
+
+	for i := 0; i < maxSize; i++ {
+		ret = append(ret, h.Candles[int(float64(i)*sampleRate)])
+	}
+
+	return ret
 }

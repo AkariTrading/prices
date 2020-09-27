@@ -1,6 +1,7 @@
 package binance
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -12,7 +13,7 @@ type ExchangeInfo struct {
 	ServerTime      int64         `json:"serverTime"`
 	RateLimits      []RateLimit   `json:"rateLimits"`
 	ExchangeFilters []interface{} `json:"exchangeFilters"`
-	Symbols         []Symbol      `json:"symbols"`
+	Symbols         []*Symbol     `json:"symbols"`
 }
 
 // RateLimit struct
@@ -36,6 +37,7 @@ type Symbol struct {
 	IsSpotTradingAllowed   bool                     `json:"isSpotTradingAllowed"`
 	IsMarginTradingAllowed bool                     `json:"isMarginTradingAllowed"`
 	Filters                []map[string]interface{} `json:"filters"`
+	LotSize                float64
 }
 
 // CheckSymbol -
@@ -44,7 +46,13 @@ func CheckSymbol(s string) bool {
 	return ok
 }
 
-func Symbols() map[string]Symbol {
+func GetSymbol(s string) (*Symbol, bool) {
+
+	ret, ok := symbolsMap[strings.ToLower(s)]
+	return ret, ok
+}
+
+func Symbols() map[string]*Symbol {
 	return symbolsMap
 }
 
@@ -79,12 +87,20 @@ func Exchangeinfo() (*ExchangeInfo, error) {
 }
 
 // SymbolNames -
-func (ex *ExchangeInfo) SymbolNamesMap(suffixes ...string) map[string]Symbol {
-	tmp := make(map[string]Symbol)
+func (ex *ExchangeInfo) SymbolNamesMap(suffixes ...string) map[string]*Symbol {
+	tmp := make(map[string]*Symbol)
 	for _, s := range ex.Symbols {
 		for _, suffix := range suffixes {
 			if s.Status == "TRADING" && s.IsSpotTradingAllowed && s.QuoteAsset == suffix {
 				tmp[strings.ToLower(s.Symbol)] = s
+				for _, object := range s.Filters {
+					if f, ok := object["filterType"]; ok {
+						if "LOT_SIZE" == f.(string) {
+							lotSize, _ := strconv.ParseFloat(object["stepSize"].(string), 64)
+							s.LotSize = lotSize
+						}
+					}
+				}
 				break
 			}
 		}

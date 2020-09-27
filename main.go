@@ -2,12 +2,12 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
 
+	"github.com/akaritrading/libs/flag"
 	"github.com/akaritrading/libs/middleware"
 	"github.com/akaritrading/libs/util"
 	"github.com/akaritrading/prices/exchanges/binance"
@@ -23,14 +23,20 @@ var upgrader = websocket.Upgrader{
 
 func main() {
 
-	err := binance.Init("TRY")
+	err := binance.InitSymbols("TRY")
+	if err != nil {
+		// TODO: log
+		os.Exit(1)
+	}
+
+	err = binance.InitPriceHistoryJob()
 	if err != nil {
 		// TODO: log
 		os.Exit(1)
 	}
 
 	r := chi.NewRouter()
-	r.Use(middleware.RequestLogger("prices"))
+	r.Use(middleware.RequestContext("prices", nil))
 	r.Use(middleware.Recoverer)
 	r.Get("/{exchange}/priceStream/{symbol}", pricesWebsocket)
 	r.Get("/{exchange}/orderbookPrice/{symbol}", orderbookPrice)
@@ -38,11 +44,16 @@ func main() {
 	// r.Get("/{exchange}/symbols", symbolHandle)
 
 	r.Route("/{exchange}/history/{symbol}", func(newRoute chi.Router) {
-		// newRoute.Use(middleware.Compress(5))
+		// newRoute.Use(chimiddleware.Compress(5))
 		newRoute.Get("/", priceHistory)
 	})
 
-	http.ListenAndServe(":8080", r)
+	server := &http.Server{
+		Addr:    flag.PricesHost(),
+		Handler: r,
+	}
+
+	server.ListenAndServe()
 }
 
 func priceHistory(w http.ResponseWriter, r *http.Request) {
@@ -76,10 +87,9 @@ func priceHistory(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		hist.Prices = util.Downsample(hist.Prices, int(maxSize))
-		hist.Volumes = util.Downsample(hist.Volumes, int(maxSize))
+		hist.Candles = hist.Downsample(int(maxSize))
 
-		bdy, err := json.Marshal(hist)
+		bdy, err := json.Marshal(hist.ToResponse())
 		if err != nil {
 			logger.Error(errors.WithStack(err))
 			w.WriteHeader(http.StatusInternalServerError)
@@ -107,6 +117,7 @@ func orderbookPrice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	util.ErrorJSON(w, util.ErrorExchangeNotFound)
 	w.WriteHeader(http.StatusNotFound)
 	return
 }
@@ -117,9 +128,6 @@ func pricesWebsocket(w http.ResponseWriter, r *http.Request) {
 
 	symbol := strings.ToLower(chi.URLParam(r, "symbol"))
 	exchange := strings.ToLower(chi.URLParam(r, "exchange"))
-
-	fmt.Println("symbol ", symbol)
-	fmt.Println("exchange ", exchange)
 
 	if exchange == "binance" {
 		if !binance.CheckSymbol(symbol) {
@@ -154,16 +162,3 @@ func pricesWebsocket(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotFound)
 	return
 }
-
-// func symbolHandle(w http.ResponseWriter, r *http.Request) {
-
-// 	exchange := strings.ToLower(chi.URLParam(r, "exchange"))
-
-// 	if exchange == "binance" {
-
-// 		binance.Symbols()
-
-// 		return
-// 	}
-
-// }

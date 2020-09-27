@@ -9,23 +9,19 @@ import (
 	"github.com/akaritrading/prices/pkg/pricesclient"
 )
 
-var symbolsMap map[string]Symbol
+var symbolsMap map[string]*Symbol
 var symbolHistoryPositions map[string]*pricesclient.HistoryPosition
-var symbolHistoryLocks map[string]*sync.Mutex
+var symbolHistoryLocks map[string]*sync.RWMutex
 
 // Init -
-func Init(allowedBasedAssets ...string) error {
-	if err := InitSymbols(allowedBasedAssets...); err != nil {
-		return err
-	}
+func InitPriceHistoryJob() error {
 
-	symbolHistoryLocks = make(map[string]*sync.Mutex)
+	symbolHistoryLocks = make(map[string]*sync.RWMutex)
+	symbolHistoryPositions = make(map[string]*pricesclient.HistoryPosition)
 
 	for s := range symbolsMap {
-		symbolHistoryLocks[s] = &sync.Mutex{}
+		symbolHistoryLocks[s] = &sync.RWMutex{}
 	}
-
-	symbolHistoryPositions = make(map[string]*pricesclient.HistoryPosition)
 
 	return priceHistoryJob()
 }
@@ -42,7 +38,6 @@ func priceHistoryJob() error {
 		if err != nil {
 			return err
 		}
-		symbolHistoryPositions = make(map[string]*pricesclient.HistoryPosition)
 	} else {
 		saves, err := pricesclient.ReadHistoryPositions(f)
 		f.Close()
@@ -62,7 +57,6 @@ func priceHistoryJob() error {
 func fetchJob() {
 
 	f, err := os.Create("/priceData/binance/symbols.json")
-
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -71,6 +65,7 @@ func fetchJob() {
 	for {
 		fetchAndSaveAll()
 		pricesclient.WriteHistoryPositions(f, symbolHistoryPositions)
+		f.Sync()
 		time.Sleep(time.Hour)
 	}
 }

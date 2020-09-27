@@ -34,7 +34,7 @@ var requestClient = http.Client{
 // OrderBookPrice -
 func OrderBookPrice(symbol string) (OrderbookPrice, error) {
 
-	if _, ok := symbolsMap[symbol]; !ok {
+	if _, ok := symbolsMap[strings.ToLower(symbol)]; !ok {
 		return OrderbookPrice{}, errors.New("symbol not found")
 	}
 
@@ -43,7 +43,6 @@ func OrderBookPrice(symbol string) (OrderbookPrice, error) {
 
 func fetchOrderBookPrice(symbol string) (OrderbookPrice, error) {
 
-	fmt.Println("symbol", symbol)
 	var data orderbook
 	err := httpGETJson(fmt.Sprintf("https://api.binance.com/api/v3/depth?symbol=%s", strings.ToUpper(symbol)), &data)
 	if err != nil {
