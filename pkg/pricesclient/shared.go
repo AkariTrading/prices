@@ -14,10 +14,6 @@ var client = http.Client{
 	Timeout: time.Second * 10,
 }
 
-const (
-	Binance string = "binance"
-)
-
 type MemoryMegabytes int
 
 type Client struct {
@@ -31,7 +27,7 @@ type Client struct {
 }
 
 func (c *Client) ToSymbol(symbolA string, symbolB string) string {
-	if c.Exchange == Binance {
+	if c.Exchange == "binance" {
 		return symbolA + symbolB
 	}
 
@@ -57,107 +53,118 @@ func getRequest(url string) ([]byte, error) {
 	return ioutil.ReadAll(res.Body)
 }
 
-// DO NOT TOUCH
-type Candle struct {
-	Open   float64
-	High   float64
-	Low    float64
-	Close  float64
-	Volume float64
-}
+// // DO NOT TOUCH
+// type Candle struct {
+// 	Open   float64
+// 	High   float64
+// 	Low    float64
+// 	Close  float64
+// 	Volume float64
+// }
 
-type HistoryPosition struct {
-	Start int64
-	End   int64
-}
+// type HistoryPosition struct {
+// 	Start int64
+// 	End   int64
+// }
 
-type HistoryPositions map[string]*HistoryPosition
+// type HistoryPositions map[string]*HistoryPosition
 
-var historyPositions HistoryPositions
-var historyPositionLock sync.Mutex
+// var historyPositions HistoryPositions
+// var historyPositionLock sync.Mutex
 
-var symbolLocks map[string]*sync.Mutex
-var symbolLock sync.Mutex
+// var symbolLocks map[string]*sync.Mutex
+// var symbolLock sync.Mutex
 
-type History struct {
-	HistoryPosition
-	Candles []Candle
-}
+// type History struct {
+// 	HistoryPosition
+// 	Candles []Candle
+// }
 
-type HistoryResponse struct {
-	HistoryPosition
-	Candles [][]float64
-}
+// type HistoryResponse struct {
+// 	HistoryPosition
+// 	Candles [][]float64
+// }
 
-func (h *HistoryResponse) ToHistory() *History {
+// func (h *HistoryResponse) ToHistory() *History {
 
-	candles := make([]Candle, 0, len(h.Candles)/5)
+// 	candles := make([]Candle, 0, len(h.Candles)/5)
 
-	for _, arr := range h.Candles {
+// 	for _, arr := range h.Candles {
 
-		candles = append(candles, Candle{
-			Open:   arr[0],
-			High:   arr[1],
-			Low:    arr[2],
-			Close:  arr[3],
-			Volume: arr[4],
-		})
-	}
+// 		candles = append(candles, Candle{
+// 			Open:   arr[0],
+// 			High:   arr[1],
+// 			Low:    arr[2],
+// 			Close:  arr[3],
+// 			Volume: arr[4],
+// 		})
+// 	}
 
-	return &History{
-		HistoryPosition: HistoryPosition{
-			Start: h.Start,
-			End:   h.End,
-		},
-		Candles: candles,
-	}
-}
+// 	return &History{
+// 		HistoryPosition: HistoryPosition{
+// 			Start: h.Start,
+// 			End:   h.End,
+// 		},
+// 		Candles: candles,
+// 	}
+// }
 
-func (h *History) ToResponse() *HistoryResponse {
+// func (h *History) ToResponse() *HistoryResponse {
 
-	ret := &HistoryResponse{
-		HistoryPosition: HistoryPosition{
-			Start: h.Start,
-			End:   h.End,
-		},
-	}
+// 	ret := &HistoryResponse{
+// 		HistoryPosition: HistoryPosition{
+// 			Start: h.Start,
+// 			End:   h.End,
+// 		},
+// 	}
 
-	for _, c := range h.Candles {
-		ret.Candles = append(ret.Candles, []float64{c.Open, c.High, c.Low, c.Close, c.Volume})
-	}
+// 	for _, c := range h.Candles {
+// 		ret.Candles = append(ret.Candles, []float64{c.Open, c.High, c.Low, c.Close, c.Volume})
+// 	}
 
-	return ret
+// 	return ret
 
-}
+// }
 
-func (h *History) Volumes() []float64 {
+// func (h *History) HighLowClose() []float64 {
 
-	ret := make([]float64, 0, len(h.Candles))
+// 	ret := make([]float64, 0, len(h.Candles))
 
-	for _, c := range h.Candles {
-		ret = append(ret, c.Volume)
-	}
+// 	for _, c := range h.Candles {
+// 		ret = append(ret, (c.High+c.Low+c.Close)/3.0)
+// 	}
 
-	return ret
-}
+// 	return ret
+// }
 
-func (h *History) Downsample(maxSize int) []Candle {
+// func (h *History) Volumes() []float64 {
 
-	if maxSize == 0 {
-		return h.Candles
-	}
+// 	ret := make([]float64, 0, len(h.Candles))
 
-	if len(h.Candles) <= maxSize {
-		return h.Candles
-	}
+// 	for _, c := range h.Candles {
+// 		ret = append(ret, c.Volume)
+// 	}
 
-	sampleRate := float64(len(h.Candles)) / float64(maxSize)
+// 	return ret
+// }
 
-	ret := make([]Candle, 0, maxSize)
+// func (h *History) Downsample(maxSize int) []Candle {
 
-	for i := 0; i < maxSize; i++ {
-		ret = append(ret, h.Candles[int(float64(i)*sampleRate)])
-	}
+// 	if maxSize == 0 {
+// 		return h.Candles
+// 	}
 
-	return ret
-}
+// 	if len(h.Candles) <= maxSize {
+// 		return h.Candles
+// 	}
+
+// 	sampleRate := float64(len(h.Candles)) / float64(maxSize)
+
+// 	ret := make([]Candle, 0, maxSize)
+
+// 	for i := 0; i < maxSize; i++ {
+// 		ret = append(ret, h.Candles[int(float64(i)*sampleRate)])
+// 	}
+
+// 	return ret
+// }
