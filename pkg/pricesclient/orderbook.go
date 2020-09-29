@@ -1,8 +1,6 @@
 package pricesclient
 
 import (
-	"encoding/json"
-	"fmt"
 	"time"
 
 	"github.com/akaritrading/libs/exchange"
@@ -32,16 +30,12 @@ func (c *Client) fetchAndStorePrice(symbol string) (exchange.OrderbookPrice, err
 
 	var price OrderbookPrice
 
-	body, err := getRequest(fmt.Sprintf("http://%s/%s/orderbookPrice/%s", c.Host, c.Exchange, symbol))
+	orderbook, err := c.priceClient.OrderbookPrice(symbol)
 	if err != nil {
-		return price.OrderbookPrice, err
+		return exchange.OrderbookPrice{}, err
 	}
 
-	err = json.Unmarshal(body, &price)
-	if err != nil {
-		return price.OrderbookPrice, err
-	}
-
+	price.OrderbookPrice = orderbook
 	price.lastUpdate = time.Now()
 	c.orderbookPriceMap.Store(symbol, price)
 	return price.OrderbookPrice, nil

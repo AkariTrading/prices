@@ -6,6 +6,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/akaritrading/libs/exchange"
+	"github.com/akaritrading/libs/exchange/binance"
 	"github.com/akaritrading/libs/util"
 	"github.com/pkg/errors"
 )
@@ -16,18 +18,27 @@ var client = http.Client{
 
 type MemoryMegabytes int
 
+type ExchangeClient interface {
+}
+
 type Client struct {
 	Host                 string
-	Exchange             string
 	OrderbookRefreshRate time.Duration
 
+	exchange          string
+	priceClient       exchange.Exchange
 	orderbookPriceMap sync.Map
 	streamMap         sync.Map
 	streamPriceMap    sync.Map
 }
 
+func (c *Client) SetToBinance() {
+	c.exchange = "binance"
+	c.priceClient = &binance.BinanceClient{}
+}
+
 func (c *Client) ToSymbol(symbolA string, symbolB string) string {
-	if c.Exchange == "binance" {
+	if c.exchange == "binance" {
 		return symbolA + symbolB
 	}
 

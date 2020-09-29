@@ -50,7 +50,7 @@ func (c *Client) newConn(symbol string, stream *stream.Stream) {
 
 	var priceStr string
 
-	url := fmt.Sprintf("ws://%s/%s/priceStream/%s", c.Host, c.Exchange, symbol)
+	url := fmt.Sprintf("ws://%s/%s/priceStream/%s", c.Host, c.exchange, symbol)
 
 	for {
 

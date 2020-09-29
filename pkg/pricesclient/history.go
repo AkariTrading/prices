@@ -25,13 +25,13 @@ func (c *Client) InitHistoryFileCache() error {
 		symbolLocks = make(map[string]*sync.Mutex)
 	}
 
-	f, err := os.Open(fmt.Sprintf("/symbolscache/%s/symbols.json", c.Exchange))
+	f, err := os.Open(fmt.Sprintf("/symbolscache/%s/symbols.json", c.exchange))
 	if err != nil {
-		err := os.RemoveAll(fmt.Sprintf("/symbolscache/%s/prices", c.Exchange))
+		err := os.RemoveAll(fmt.Sprintf("/symbolscache/%s/prices", c.exchange))
 		if err != nil {
 			return err
 		}
-		err = os.MkdirAll(fmt.Sprintf("/symbolscache/%s/prices", c.Exchange), 0770)
+		err = os.MkdirAll(fmt.Sprintf("/symbolscache/%s/prices", c.exchange), 0770)
 		if err != nil {
 			return err
 		}
@@ -64,7 +64,7 @@ func (c *Client) SymbolHistory(symbol string, start int64, end int64) (*exchange
 		return nil, err
 	}
 
-	priceFile, err := os.Open(fmt.Sprintf("/symbolscache/%s/prices/%s", c.Exchange, symbol))
+	priceFile, err := os.Open(fmt.Sprintf("/symbolscache/%s/prices/%s", c.exchange, symbol))
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +98,7 @@ func (c *Client) fetchAndCacheFile(symbol string) error {
 
 	savePos(symbol, &hist.HistoryPosition)
 
-	priceFile, err := os.OpenFile(fmt.Sprintf("/symbolscache/%s/prices/%s", c.Exchange, symbol), os.O_APPEND|os.O_CREATE, 0644)
+	priceFile, err := os.OpenFile(fmt.Sprintf("/symbolscache/%s/prices/%s", c.exchange, symbol), os.O_APPEND|os.O_CREATE, 0644)
 	if err != nil {
 		return err
 	}
@@ -114,7 +114,7 @@ func (c *Client) fetchAndCacheFile(symbol string) error {
 	historyPositionLock.Lock()
 	defer historyPositionLock.Unlock()
 
-	posFile, err := os.Create(fmt.Sprintf("/symbolscache/%s/symbols.json", c.Exchange))
+	posFile, err := os.Create(fmt.Sprintf("/symbolscache/%s/symbols.json", c.exchange))
 	if err != nil {
 		return err
 	}
@@ -175,7 +175,7 @@ func delSymbolLock(symbol string) {
 
 func (c *Client) GetHistory(symbol string, start int64, maxSize int64) (*exchange.HistoryFlat, error) {
 
-	body, err := getRequest(fmt.Sprintf("http://%s/%s/history/%s?start=%d&maxSize=%d", c.Host, c.Exchange, symbol, start, maxSize))
+	body, err := getRequest(fmt.Sprintf("http://%s/%s/history/%s?start=%d&maxSize=%d", c.Host, c.exchange, symbol, start, maxSize))
 	if err != nil {
 		return nil, err
 	}
