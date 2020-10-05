@@ -21,28 +21,38 @@ type MemoryMegabytes int
 type ExchangeClient interface {
 }
 
+type PricesReader interface {
+	OrderbookPrice(symbol string) (exchange.OrderbookPrice, error)
+	GetHistory(symbol string, start int64, maxSize int64) (*exchange.HistoryFlat, error)
+}
+
 type Client struct {
 	Host                 string
 	OrderbookRefreshRate time.Duration
+	ExchangeName         string
 
-	exchange          string
-	priceClient       exchange.Exchange
+	exchange          exchange.Exchange
 	orderbookPriceMap sync.Map
 	streamMap         sync.Map
 	streamPriceMap    sync.Map
 }
 
-func (c *Client) SetToBinance() {
-	c.exchange = "binance"
-	c.priceClient = &binance.BinanceClient{}
+func (c *Client) ToSymbol(a, b string) string {
+	return c.exchange.ToSymbol(a, b)
 }
 
-func (c *Client) ToSymbol(symbolA string, symbolB string) string {
-	if c.exchange == "binance" {
-		return symbolA + symbolB
+func (c *Client) InitBinance() error {
+
+	binanceClient := &binance.BinanceClient{}
+
+	if err := binanceClient.Init(); err != nil {
+		return err
 	}
 
-	return symbolA + symbolB
+	c.ExchangeName = "binance"
+	c.exchange = binanceClient
+
+	return nil
 }
 
 func getRequest(url string) ([]byte, error) {
@@ -63,119 +73,3 @@ func getRequest(url string) ([]byte, error) {
 
 	return ioutil.ReadAll(res.Body)
 }
-
-// // DO NOT TOUCH
-// type Candle struct {
-// 	Open   float64
-// 	High   float64
-// 	Low    float64
-// 	Close  float64
-// 	Volume float64
-// }
-
-// type HistoryPosition struct {
-// 	Start int64
-// 	End   int64
-// }
-
-// type HistoryPositions map[string]*HistoryPosition
-
-// var historyPositions HistoryPositions
-// var historyPositionLock sync.Mutex
-
-// var symbolLocks map[string]*sync.Mutex
-// var symbolLock sync.Mutex
-
-// type History struct {
-// 	HistoryPosition
-// 	Candles []Candle
-// }
-
-// type HistoryResponse struct {
-// 	HistoryPosition
-// 	Candles [][]float64
-// }
-
-// func (h *HistoryResponse) ToHistory() *History {
-
-// 	candles := make([]Candle, 0, len(h.Candles)/5)
-
-// 	for _, arr := range h.Candles {
-
-// 		candles = append(candles, Candle{
-// 			Open:   arr[0],
-// 			High:   arr[1],
-// 			Low:    arr[2],
-// 			Close:  arr[3],
-// 			Volume: arr[4],
-// 		})
-// 	}
-
-// 	return &History{
-// 		HistoryPosition: HistoryPosition{
-// 			Start: h.Start,
-// 			End:   h.End,
-// 		},
-// 		Candles: candles,
-// 	}
-// }
-
-// func (h *History) ToResponse() *HistoryResponse {
-
-// 	ret := &HistoryResponse{
-// 		HistoryPosition: HistoryPosition{
-// 			Start: h.Start,
-// 			End:   h.End,
-// 		},
-// 	}
-
-// 	for _, c := range h.Candles {
-// 		ret.Candles = append(ret.Candles, []float64{c.Open, c.High, c.Low, c.Close, c.Volume})
-// 	}
-
-// 	return ret
-
-// }
-
-// func (h *History) HighLowClose() []float64 {
-
-// 	ret := make([]float64, 0, len(h.Candles))
-
-// 	for _, c := range h.Candles {
-// 		ret = append(ret, (c.High+c.Low+c.Close)/3.0)
-// 	}
-
-// 	return ret
-// }
-
-// func (h *History) Volumes() []float64 {
-
-// 	ret := make([]float64, 0, len(h.Candles))
-
-// 	for _, c := range h.Candles {
-// 		ret = append(ret, c.Volume)
-// 	}
-
-// 	return ret
-// }
-
-// func (h *History) Downsample(maxSize int) []Candle {
-
-// 	if maxSize == 0 {
-// 		return h.Candles
-// 	}
-
-// 	if len(h.Candles) <= maxSize {
-// 		return h.Candles
-// 	}
-
-// 	sampleRate := float64(len(h.Candles)) / float64(maxSize)
-
-// 	ret := make([]Candle, 0, maxSize)
-
-// 	for i := 0; i < maxSize; i++ {
-// 		ret = append(ret, h.Candles[int(float64(i)*sampleRate)])
-// 	}
-
-// 	return ret
-// }

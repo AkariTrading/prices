@@ -30,7 +30,7 @@ func (c *Client) fetchAndStorePrice(symbol string) (exchange.OrderbookPrice, err
 
 	var price OrderbookPrice
 
-	orderbook, err := c.priceClient.OrderbookPrice(symbol)
+	orderbook, err := c.exchange.OrderbookPrice(symbol)
 	if err != nil {
 		return exchange.OrderbookPrice{}, err
 	}

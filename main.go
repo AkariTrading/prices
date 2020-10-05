@@ -2,9 +2,13 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
+	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 
 	"github.com/akaritrading/libs/exchange/binance"
 	"github.com/akaritrading/libs/flag"
@@ -19,18 +23,23 @@ var upgrader = websocket.Upgrader{
 	WriteBufferSize: 1024,
 }
 
+var binanceHistory *ExchangeHistory
+var binanceClient *binance.BinanceClient
+
 func main() {
 
-	err := binance.InitSymbols("TRY")
+	binanceClient = &binance.BinanceClient{}
+	err := binanceClient.Init("TRY")
 	if err != nil {
-		// TODO: log
-		os.Exit(1)
+		log.Fatal(err)
 	}
 
-	err = binance.InitPriceHistoryJob()
+	stopJob := make(chan int)
+	onExit(stopJob)
+
+	binanceHistory, err = InitHistoryJob("binance", binanceClient, stopJob)
 	if err != nil {
-		// TODO: log
-		os.Exit(1)
+		log.Fatal(err)
 	}
 
 	r := chi.NewRouter()
@@ -74,11 +83,11 @@ func priceHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if exchange == "binance" {
-		if !binance.CheckSymbol(symbol) {
+		if err := binanceClient.CheckSymbol(symbol); err != nil {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		hist, err := binance.GetSymbolHistory(symbol, start)
+		hist, err := binanceHistory.GetSymbolHistory(symbol, start)
 		if err != nil {
 			logger.Error(errors.WithStack(err))
 			w.WriteHeader(http.StatusInternalServerError)
@@ -128,7 +137,7 @@ func pricesWebsocket(w http.ResponseWriter, r *http.Request) {
 	exchange := chi.URLParam(r, "exchange")
 
 	if exchange == "binance" {
-		if !binance.CheckSymbol(symbol) {
+		if err := binanceClient.CheckSymbol(symbol); err != nil {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -159,4 +168,17 @@ func pricesWebsocket(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusNotFound)
 	return
+}
+
+func onExit(stop ...chan int) {
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, syscall.SIGINT, syscall.SIGKILL, syscall.SIGTERM)
+	go func() {
+		<-c
+		fmt.Println("notify")
+		for _, s := range stop {
+			s <- 1
+		}
+		os.Exit(0)
+	}()
 }
