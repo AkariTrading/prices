@@ -8,22 +8,13 @@ import (
 
 	"github.com/akaritrading/libs/exchange"
 	"github.com/akaritrading/libs/exchange/binance"
+	"github.com/akaritrading/libs/flag"
 	"github.com/akaritrading/libs/util"
 	"github.com/pkg/errors"
 )
 
 var client = http.Client{
 	Timeout: time.Second * 10,
-}
-
-type MemoryMegabytes int
-
-type ExchangeClient interface {
-}
-
-type PricesReader interface {
-	OrderbookPrice(symbol string) (exchange.OrderbookPrice, error)
-	GetHistory(symbol string, start int64, maxSize int64) (*exchange.HistoryFlat, error)
 }
 
 type Client struct {
@@ -49,6 +40,7 @@ func (c *Client) InitBinance() error {
 		return err
 	}
 
+	c.Host = flag.PricesHost()
 	c.ExchangeName = "binance"
 	c.exchange = binanceClient
 
