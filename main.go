@@ -7,48 +7,44 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
+	"time"
 
 	"github.com/akaritrading/libs/exchange/binance"
+	"github.com/akaritrading/libs/exchange/candlefs"
 	"github.com/akaritrading/libs/flag"
 	"github.com/akaritrading/libs/middleware"
+	"github.com/akaritrading/libs/util"
 	"github.com/go-chi/chi"
-	"github.com/gorilla/websocket"
 	"github.com/pkg/errors"
 )
 
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-}
-
-var binanceHistory *ExchangeHistory
 var binanceClient *binance.BinanceClient
+var binanceCandlefs *candlefs.CandleFS
 
 func main() {
 
 	binanceClient = &binance.BinanceClient{}
-	err := binanceClient.Init("TRY")
+	err := binanceClient.FetchSymbols("TRY")
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	err = os.MkdirAll("/candles/binance/", 0644)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	binanceCandlefs = candlefs.New("/candles/binance/")
 
 	stopJob := make(chan int)
 	onExit(stopJob)
 
-	binanceHistory, err = InitHistoryJob("binance", binanceClient, stopJob)
-	if err != nil {
-		log.Fatal(err)
-	}
+	StartHistoryFetch(binanceCandlefs, binanceClient, stopJob)
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestContext("prices", nil))
 	r.Use(middleware.Recoverer)
-	r.Get("/{exchange}/priceStream/{symbol}", pricesWebsocket)
-
-	// r.Get("/{exchange}/orderbookPrice/{symbol}", orderbookPrice)
-	// r.Get("/{exchange}/symbols", symbolHandle)
 
 	r.Route("/{exchange}/history/{symbol}", func(newRoute chi.Router) {
 		// newRoute.Use(chimiddleware.Compress(5))
@@ -72,22 +68,37 @@ func priceHistory(w http.ResponseWriter, r *http.Request) {
 	exchange := chi.URLParam(r, "exchange")
 	symbol := chi.URLParam(r, "symbol")
 
-	start, err := strconv.ParseInt(r.URL.Query().Get("start"), 10, 64)
+	start, err := util.StrToInt(r.URL.Query().Get("start"))
 	if err != nil {
 		start = 0
 	}
 
-	maxSize, err := strconv.ParseInt(r.URL.Query().Get("maxSize"), 10, 64)
+	end, err := util.StrToInt(r.URL.Query().Get("end"))
+	if err != nil {
+		end = time.Now().Unix() * 1000
+	}
+
+	maxSize, err := util.StrToInt(r.URL.Query().Get("maxSize"))
 	if err != nil {
 		maxSize = 0
 	}
 
 	if exchange == "binance" {
+
 		if err := binanceClient.CheckSymbol(symbol); err != nil {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		hist, err := binanceHistory.GetSymbolHistory(symbol, start)
+
+		symbolHandle, err := binanceCandlefs.Open(symbol)
+		if err != nil {
+			logger.Error(errors.WithStack(err))
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		defer symbolHandle.Close()
+
+		hist, err := symbolHandle.Read(start, end)
 		if err != nil {
 			logger.Error(errors.WithStack(err))
 			w.WriteHeader(http.StatusInternalServerError)
@@ -95,8 +106,7 @@ func priceHistory(w http.ResponseWriter, r *http.Request) {
 		}
 
 		hist.Candles = hist.Downsample(int(maxSize))
-
-		bdy, err := json.Marshal(hist.ToResponse())
+		bdy, err := json.Marshal(hist.ToFlat())
 		if err != nil {
 			logger.Error(errors.WithStack(err))
 			w.WriteHeader(http.StatusInternalServerError)
@@ -105,69 +115,6 @@ func priceHistory(w http.ResponseWriter, r *http.Request) {
 
 		w.Write(bdy)
 	}
-}
-
-// func orderbookPrice(w http.ResponseWriter, r *http.Request) {
-
-// 	symbol := strings.ToLower(chi.URLParam(r, "symbol"))
-// 	exchange := strings.ToLower(chi.URLParam(r, "exchange"))
-
-// 	if exchange == "binance" {
-// 		if !binance.CheckSymbol(symbol) {
-// 			w.WriteHeader(http.StatusNotFound)
-// 			return
-// 		}
-
-// 		price, _ := binance.OrderBookPrice(symbol)
-// 		js, _ := json.Marshal(price)
-// 		w.Write(js)
-// 		return
-// 	}
-
-// 	util.ErrorJSON(w, util.ErrorExchangeNotFound)
-// 	w.WriteHeader(http.StatusNotFound)
-// 	return
-// }
-
-func pricesWebsocket(w http.ResponseWriter, r *http.Request) {
-
-	logger := middleware.GetLogger(r)
-
-	symbol := chi.URLParam(r, "symbol")
-	exchange := chi.URLParam(r, "exchange")
-
-	if exchange == "binance" {
-		if err := binanceClient.CheckSymbol(symbol); err != nil {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-
-		conn, err := upgrader.Upgrade(w, r, nil)
-
-		if err != nil {
-			logger.Error(errors.WithStack(err))
-			return
-		}
-
-		defer conn.Close()
-
-		stream := binance.PriceStream(symbol)
-		sub := stream.Subscribe(1)
-		defer sub.Unsubscribe()
-
-		for {
-			val, _ := sub.Read()
-			err = conn.WriteJSON(val)
-			if err != nil {
-				logger.Error(errors.WithStack(err))
-				sub.Unsubscribe()
-				return
-			}
-		}
-	}
-
-	w.WriteHeader(http.StatusNotFound)
-	return
 }
 
 func onExit(stop ...chan int) {
