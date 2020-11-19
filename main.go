@@ -25,7 +25,7 @@ var binanceCandlefs *candlefs.CandleFS
 func main() {
 
 	binanceClient = &binance.BinanceClient{}
-	err := binanceClient.FetchSymbols("TRY")
+	err := binanceClient.FetchSymbols()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -101,7 +101,7 @@ func priceHistory(w http.ResponseWriter, r *http.Request) {
 		hist, err := symbolHandle.Read(start, end)
 		if err != nil {
 			logger.Error(errors.WithStack(err))
-			w.WriteHeader(http.StatusInternalServerError)
+			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
@@ -114,6 +114,8 @@ func priceHistory(w http.ResponseWriter, r *http.Request) {
 		}
 
 		w.Write(bdy)
+	} else {
+		util.ErrorJSON(w, util.ErrorExchangeNotFound)
 	}
 }
 

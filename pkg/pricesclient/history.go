@@ -19,19 +19,26 @@ var requestClient = http.Client{
 }
 
 type Client struct {
-	host string
+	host     string
+	exchange string
 }
 
-func New(host string) *Client {
-	return &Client{
-		host: host,
+func InitHistoryClient(host string, exchange string) (*Client, error) {
+
+	if err := os.MkdirAll(fmt.Sprintf("/candleCache/%s/", exchange), 0644); err != nil {
+		return nil, err
 	}
+
+	return &Client{
+		host:     host,
+		exchange: exchange,
+	}, nil
 }
 
 func (c *Client) RequestHistory(symbol string, start int64, end int64, maxSize int64) (*exchange.HistoryFlat, error) {
 
 	var history exchange.HistoryFlat
-	_, err := util.Request(&requestClient, "GET", fmt.Sprintf("%s/history/%s?start=%d&end=%d&maxSize=%d", c.host, symbol, start, end, maxSize), nil, &history)
+	_, err := util.Request(&requestClient, "GET", fmt.Sprintf("http://%s/%s/history/%s?start=%d&end=%d&maxSize=%d", c.host, c.exchange, symbol, start, end, maxSize), nil, &history)
 	if err != nil {
 		return nil, err
 	}
@@ -41,11 +48,7 @@ func (c *Client) RequestHistory(symbol string, start int64, end int64, maxSize i
 
 func (c *Client) Read(symbol string, start int64, end int64, maxSize int64) (*exchange.History, error) {
 
-	if err := os.MkdirAll("/candleCache/", 0644); err != nil {
-		return nil, err
-	}
-
-	sh, err := candlefs.New("/candleCache/").Open(symbol)
+	sh, err := candlefs.New(fmt.Sprintf("/candleCache/%s/", c.exchange)).Open(symbol)
 	if err != nil {
 		return nil, err
 	}

@@ -75,7 +75,8 @@ func StartHistoryFetch(handle *candlefs.CandleFS, client exchange.Exchange, stop
 			select {
 			case <-stop:
 				return
-			case <-time.NewTimer(time.Minute * 30).C:
+			case <-time.NewTimer(time.Minute * 5).C:
+				logger.Info("sleeping")
 			}
 		}
 	}()
