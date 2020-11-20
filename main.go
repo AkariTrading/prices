@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -13,6 +12,7 @@ import (
 	"github.com/akaritrading/libs/exchange/binance"
 	"github.com/akaritrading/libs/exchange/candlefs"
 	"github.com/akaritrading/libs/flag"
+	"github.com/akaritrading/libs/log"
 	"github.com/akaritrading/libs/middleware"
 	"github.com/akaritrading/libs/util"
 	"github.com/go-chi/chi"
@@ -24,23 +24,23 @@ var binanceCandlefs *candlefs.CandleFS
 
 func main() {
 
+	logger := log.New("prices", "")
 	binanceClient = &binance.BinanceClient{}
 	err := binanceClient.FetchSymbols()
 	if err != nil {
-		log.Fatal(err)
+		logger.Fatal(err)
 	}
 
 	err = os.MkdirAll("/candles/binance/", 0644)
 	if err != nil {
-		log.Fatal(err)
+		logger.Fatal(err)
 	}
 
 	binanceCandlefs = candlefs.New("/candles/binance/")
 
-	stopJob := make(chan int)
-	onExit(stopJob)
-
-	StartHistoryFetch(binanceCandlefs, binanceClient, stopJob)
+	// stopJob := make(chan int)
+	// onExit(stopJob)
+	// StartHistoryFetch(binanceCandlefs, binanceClient, stopJob)
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestContext("prices", nil))
@@ -56,7 +56,9 @@ func main() {
 		Handler: r,
 	}
 
-	server.ListenAndServe()
+	if err := server.ListenAndServe(); err != nil {
+		logger.Error(err)
+	}
 }
 
 func priceHistory(w http.ResponseWriter, r *http.Request) {
