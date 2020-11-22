@@ -38,9 +38,9 @@ func main() {
 
 	binanceCandlefs = candlefs.New("/candles/binance/")
 
-	// stopJob := make(chan int)
-	// onExit(stopJob)
-	// StartHistoryFetch(binanceCandlefs, binanceClient, stopJob)
+	stopJob := make(chan int)
+	onExit(stopJob)
+	StartHistoryFetch(binanceCandlefs, binanceClient, stopJob)
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestContext("prices", nil))

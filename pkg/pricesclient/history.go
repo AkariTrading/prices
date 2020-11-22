@@ -10,6 +10,7 @@ import (
 	"github.com/akaritrading/libs/exchange"
 	"github.com/akaritrading/libs/exchange/candlefs"
 	"github.com/akaritrading/libs/log"
+	"github.com/akaritrading/libs/middleware"
 	"github.com/akaritrading/libs/util"
 	"github.com/pkg/errors"
 )
@@ -17,7 +18,7 @@ import (
 var ErrorDateRange = errors.New("date range error")
 
 var requestClient = http.Client{
-	Timeout: time.Second * 10,
+	Timeout: time.Second * 30,
 }
 
 type Client struct {
@@ -30,7 +31,13 @@ type Client struct {
 	logger      *log.Logger
 }
 
-func InitHistoryClient(host string, exchange string, logger *log.Logger) (*Client, error) {
+type Request struct {
+	c         *Client
+	requestID string
+	logger    *log.Logger
+}
+
+func Create(host string, exchange string) (*Client, error) {
 
 	if err := os.MkdirAll(fmt.Sprintf("/candleCache/%s/", exchange), 0644); err != nil {
 		return nil, err
@@ -42,48 +49,33 @@ func InitHistoryClient(host string, exchange string, logger *log.Logger) (*Clien
 		mu:          &sync.Mutex{},
 		appendQueue: map[string]bool{},
 		candlefs:    candlefs.New(fmt.Sprintf("/candleCache/%s/", exchange)),
-		logger:      logger,
 	}
 
 	return c, nil
 }
 
-// func (c *Client) WorkOnQueue() {
+func (c *Client) NewRequest(r *http.Request) *Request {
 
-// 	c.mu.Lock()
-// 	var symbols []string
-// 	for k := range c.appendQueue {
-// 		symbols = append(symbols, k)
-// 	}
-// 	for _, k := range symbols {
-// 		delete(c.appendQueue, k)
-// 	}
-// 	c.mu.Unlock()
+	logger := middleware.GetLogger(r)
+	requestID := middleware.GetRequestID(r)
 
-// 	for _, symbol := range symbols {
+	return &Request{
+		c:         c,
+		requestID: requestID,
+		logger:    logger,
+	}
+}
 
-// 		sh, err := c.candlefs.Open(symbol)
-// 		if err != nil {
-// 			c.logger.Error(err)
-// 		}
-
-// 		hist, err := c.RequestHistory(symbol, sh.End(), time.Now().Unix()*1000, 0)
-// 		if err != nil {
-// 			c.logger.Error(err)
-// 		}
-
-// 		err = sh.Append(hist.Start, hist.ToHistory().Candles)
-// 		if err != nil {
-// 			c.logger.Error(err)
-// 		}
-// 	}
-
-// }
-
-func (c *Client) RequestHistory(symbol string, start int64, end int64, maxSize int64) (*exchange.HistoryFlat, error) {
+func (r *Request) RequestHistory(symbol string, start int64, end int64, maxSize int64) (*exchange.HistoryFlat, error) {
 
 	var history exchange.HistoryFlat
-	_, err := util.Request(&requestClient, "GET", fmt.Sprintf("http://%s/%s/history/%s?start=%d&end=%d&maxSize=%d", c.host, c.exchange, symbol, start, end, maxSize), nil, &history)
+
+	req, err := util.NewRequest("GET", fmt.Sprintf("http://%s/%s/history/%s?start=%d&end=%d&maxSize=%d", r.c.host, r.c.exchange, symbol, start, end, maxSize), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = util.DoRequest(&requestClient, middleware.SetRequestID(req, r.requestID), &history)
 	if err != nil {
 		return nil, err
 	}
@@ -91,27 +83,29 @@ func (c *Client) RequestHistory(symbol string, start int64, end int64, maxSize i
 	return &history, nil
 }
 
-func (c *Client) Read(symbol string, start int64, end int64) (*exchange.History, error) {
+func (r *Request) Read(symbol string, start int64, end int64) (*exchange.History, error) {
 
-	sh, err := c.candlefs.Open(symbol)
+	sh, err := r.c.candlefs.Open(symbol)
 	if err != nil {
 		return nil, err
 	}
 	defer sh.Close()
 
+	// TODO: maybe have a per symbol lock, because this blocks the entire service
 	if sh.End() == 0 {
-		c.mu.Lock()
+		r.c.mu.Lock()
 
-		hist, err := c.RequestHistory(symbol, sh.End(), time.Now().Unix()*1000, 0)
+		hist, err := r.RequestHistory(symbol, sh.End(), time.Now().Unix()*1000, 0)
 		if err != nil {
-			c.logger.Error(err)
+			r.logger.Error(err)
 		}
 
 		err = sh.Append(hist.Start, hist.ToHistory().Candles)
 		if err != nil {
-			c.logger.Error(err)
+			r.logger.Error(err)
 		}
-		c.mu.Unlock()
+
+		r.c.mu.Unlock()
 	}
 
 	return sh.Read(start, end)
