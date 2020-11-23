@@ -70,12 +70,12 @@ func (r *Request) RequestHistory(symbol string, start int64, end int64, maxSize 
 
 	var history exchange.HistoryFlat
 
-	req, err := util.NewRequest("GET", fmt.Sprintf("http://%s/%s/history/%s?start=%d&end=%d&maxSize=%d", r.c.host, r.c.exchange, symbol, start, end, maxSize), nil)
+	req, err := util.NewRequest("GET", fmt.Sprintf("http://%s/%s/history/%s?start=%d&end=%d&maxSize=%d", r.c.host, r.c.exchange, symbol, start, end, maxSize), r.requestID, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	_, err = util.DoRequest(&requestClient, middleware.SetRequestID(req, r.requestID), &history)
+	_, err = util.DoRequest(&requestClient, req, &history)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +83,7 @@ func (r *Request) RequestHistory(symbol string, start int64, end int64, maxSize 
 	return &history, nil
 }
 
-func (r *Request) Read(symbol string, start int64, end int64) (*exchange.History, error) {
+func (r *Request) Read(symbol string, start int64, end int64, maxSize int64) (*exchange.History, error) {
 
 	sh, err := r.c.candlefs.Open(symbol)
 	if err != nil {
@@ -95,7 +95,7 @@ func (r *Request) Read(symbol string, start int64, end int64) (*exchange.History
 	if sh.End() == 0 {
 		r.c.mu.Lock()
 
-		hist, err := r.RequestHistory(symbol, sh.End(), time.Now().Unix()*1000, 0)
+		hist, err := r.RequestHistory(symbol, sh.End(), time.Now().Unix()*1000, maxSize)
 		if err != nil {
 			r.logger.Error(err)
 		}
