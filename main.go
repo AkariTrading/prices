@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -9,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/akaritrading/libs/errutil"
 	"github.com/akaritrading/libs/exchange/binance"
 	"github.com/akaritrading/libs/exchange/candlefs"
 	"github.com/akaritrading/libs/flag"
@@ -38,9 +38,9 @@ func main() {
 
 	binanceCandlefs = candlefs.New("/candles/binance/")
 
-	stopJob := make(chan int)
-	onExit(stopJob)
-	StartHistoryFetch(binanceCandlefs, binanceClient, stopJob)
+	// stopJob := make(chan int)
+	// onExit(stopJob)
+	// StartHistoryFetch(binanceCandlefs, binanceClient, stopJob)
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestContext("prices", nil))
@@ -80,10 +80,10 @@ func priceHistory(w http.ResponseWriter, r *http.Request) {
 		end = time.Now().Unix() * 1000
 	}
 
-	maxSize, err := util.StrToInt(r.URL.Query().Get("maxSize"))
-	if err != nil {
-		maxSize = 0
-	}
+	// maxSize, err := util.StrToInt(r.URL.Query().Get("maxSize"))
+	// if err != nil {
+	// 	maxSize = 0
+	// }
 
 	if exchange == "binance" {
 
@@ -100,24 +100,18 @@ func priceHistory(w http.ResponseWriter, r *http.Request) {
 		}
 		defer symbolHandle.Close()
 
-		hist, err := symbolHandle.Read(start, end)
+		data, err := symbolHandle.Encode(start, end)
 		if err != nil {
 			logger.Error(errors.WithStack(err))
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
-		hist.Candles = hist.Downsample(int(maxSize))
-		bdy, err := json.Marshal(hist.ToFlat())
-		if err != nil {
-			logger.Error(errors.WithStack(err))
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
+		fmt.Println(start, end, len(data))
 
-		w.Write(bdy)
+		w.Write(data)
 	} else {
-		util.ErrorJSON(w, util.ErrorExchangeNotFound)
+		errutil.ErrorJSON(w, util.ErrorExchangeNotFound)
 	}
 }
 

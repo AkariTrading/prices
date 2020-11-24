@@ -2,6 +2,7 @@ package pricesclient
 
 import (
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"sync"
@@ -66,24 +67,30 @@ func (c *Client) NewRequest(r *http.Request) *Request {
 	}
 }
 
-func (r *Request) RequestHistory(symbol string, start int64, end int64, maxSize int64) (*exchange.HistoryFlat, error) {
+func (r *Request) FetchHistory(symbol string, start int64, end int64) (*exchange.History, error) {
 
-	var history exchange.HistoryFlat
+	timer := r.logger.TimerStart("FetchHistory")
+	defer timer.Stop()
 
-	req, err := util.NewRequest("GET", fmt.Sprintf("http://%s/%s/history/%s?start=%d&end=%d&maxSize=%d", r.c.host, r.c.exchange, symbol, start, end, maxSize), r.requestID, nil)
+	req, err := util.NewRequest("GET", fmt.Sprintf("http://%s/%s/history/%s?start=%d&end=%d", r.c.host, r.c.exchange, symbol, start, end), r.requestID, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	_, err = util.DoRequest(&requestClient, req, &history)
+	res, err := requestClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
 
-	return &history, nil
+	data, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	return candlefs.Decode(data)
 }
 
-func (r *Request) Read(symbol string, start int64, end int64, maxSize int64) (*exchange.History, error) {
+func (r *Request) Read(symbol string, start int64, end int64) (*exchange.History, error) {
 
 	sh, err := r.c.candlefs.Open(symbol)
 	if err != nil {
@@ -91,21 +98,26 @@ func (r *Request) Read(symbol string, start int64, end int64, maxSize int64) (*e
 	}
 	defer sh.Close()
 
-	// TODO: maybe have a per symbol lock, because this blocks the entire service
-	if sh.End() == 0 {
+	if sh.End() < end {
+
+		// TODO: maybe have a per symbol lock, because this blocks the entire service
 		r.c.mu.Lock()
+		defer r.c.mu.Unlock()
 
-		hist, err := r.RequestHistory(symbol, sh.End(), time.Now().Unix()*1000, maxSize)
+		hist, err := r.FetchHistory(symbol, sh.End(), time.Now().Unix()*1000)
 		if err != nil {
 			r.logger.Error(err)
+			return nil, err
 		}
 
-		err = sh.Append(hist.Start, hist.ToHistory().Candles)
+		fmt.Println(hist.Start, hist.End, len(hist.Candles))
+
+		err = sh.Append(hist.Start, hist.Candles)
 		if err != nil {
 			r.logger.Error(err)
+			return nil, err
 		}
 
-		r.c.mu.Unlock()
 	}
 
 	return sh.Read(start, end)
