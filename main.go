@@ -1,11 +1,11 @@
 package main
 
 import (
+	"archive/zip"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
 	"github.com/akaritrading/libs/errutil"
@@ -41,6 +41,10 @@ func main() {
 	// stopJob := make(chan int)
 	// onExit(stopJob)
 	// StartHistoryFetch(binanceCandlefs, binanceClient, stopJob)
+
+	// if err := createZip("/candles", "binance"); err != nil {
+	// 	logger.Fatal(err)
+	// }
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestContext("prices", nil))
@@ -115,15 +119,38 @@ func priceHistory(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func onExit(stop ...chan int) {
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, syscall.SIGINT, syscall.SIGKILL, syscall.SIGTERM)
-	go func() {
-		<-c
-		fmt.Println("notify")
-		for _, s := range stop {
-			s <- 1
+// not needed
+func createZip(path string, exchange string) error {
+
+	zipFile, err := os.Create(fmt.Sprintf("%s/%s.zip", path, exchange))
+	if err != nil {
+		return err
+	}
+	defer zipFile.Close()
+
+	w := zip.NewWriter(zipFile)
+
+	files, err := ioutil.ReadDir(fmt.Sprintf("%s/%s", path, exchange))
+	if err != nil {
+		return err
+	}
+
+	for _, f := range files {
+		data, err := ioutil.ReadFile(fmt.Sprintf("%s/%s/%s", path, exchange, f.Name()))
+		if err != nil {
+			return err
 		}
-		os.Exit(0)
-	}()
+
+		fz, err := w.Create(f.Name())
+		if err != nil {
+			return err
+		}
+
+		_, err = fz.Write(data)
+		if err != nil {
+			return err
+		}
+	}
+
+	return w.Close()
 }
