@@ -1,9 +1,7 @@
 package main
 
 import (
-	"archive/zip"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"time"
@@ -38,13 +36,9 @@ func main() {
 
 	binanceCandlefs = candlefs.New("/candles/binance/")
 
-	// stopJob := make(chan int)
-	// onExit(stopJob)
-	// StartHistoryFetch(binanceCandlefs, binanceClient, stopJob)
-
-	// if err := createZip("/candles", "binance"); err != nil {
-	// 	logger.Fatal(err)
-	// }
+	stopJob := make(chan int)
+	util.OnExit(stopJob)
+	StartHistoryFetch(binanceCandlefs, binanceClient, stopJob)
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestContext("prices", nil))
@@ -120,37 +114,37 @@ func priceHistory(w http.ResponseWriter, r *http.Request) {
 }
 
 // not needed
-func createZip(path string, exchange string) error {
+// func createZip(path string, exchange string) error {
 
-	zipFile, err := os.Create(fmt.Sprintf("%s/%s.zip", path, exchange))
-	if err != nil {
-		return err
-	}
-	defer zipFile.Close()
+// 	zipFile, err := os.Create(fmt.Sprintf("%s/%s.zip", path, exchange))
+// 	if err != nil {
+// 		return err
+// 	}
+// 	defer zipFile.Close()
 
-	w := zip.NewWriter(zipFile)
+// 	w := zip.NewWriter(zipFile)
 
-	files, err := ioutil.ReadDir(fmt.Sprintf("%s/%s", path, exchange))
-	if err != nil {
-		return err
-	}
+// 	files, err := ioutil.ReadDir(fmt.Sprintf("%s/%s", path, exchange))
+// 	if err != nil {
+// 		return err
+// 	}
 
-	for _, f := range files {
-		data, err := ioutil.ReadFile(fmt.Sprintf("%s/%s/%s", path, exchange, f.Name()))
-		if err != nil {
-			return err
-		}
+// 	for _, f := range files {
+// 		data, err := ioutil.ReadFile(fmt.Sprintf("%s/%s/%s", path, exchange, f.Name()))
+// 		if err != nil {
+// 			return err
+// 		}
 
-		fz, err := w.Create(f.Name())
-		if err != nil {
-			return err
-		}
+// 		fz, err := w.Create(f.Name())
+// 		if err != nil {
+// 			return err
+// 		}
 
-		_, err = fz.Write(data)
-		if err != nil {
-			return err
-		}
-	}
+// 		_, err = fz.Write(data)
+// 		if err != nil {
+// 			return err
+// 		}
+// 	}
 
-	return w.Close()
-}
+// 	return w.Close()
+// }

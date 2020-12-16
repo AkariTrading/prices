@@ -42,9 +42,17 @@ type Request struct {
 	logger    *log.Logger
 }
 
+func CachePath() string {
+	return "/candleCache"
+}
+
+func CachePathExchange(exchange string) string {
+	return fmt.Sprintf("%s/%s", CachePath(), exchange)
+}
+
 func Create(host string, exchange string) (*Client, error) {
 
-	if err := os.MkdirAll(fmt.Sprintf("/candleCache/%s/", exchange), 0644); err != nil {
+	if err := os.MkdirAll(fmt.Sprintf("%s/%s/", CachePath(), exchange), 0644); err != nil {
 		return nil, err
 	}
 
@@ -65,7 +73,7 @@ func Create(host string, exchange string) (*Client, error) {
 		exchange:    exchange,
 		mu:          &sync.Mutex{},
 		appendQueue: map[string]bool{},
-		candlefs:    candlefs.New(fmt.Sprintf("/candleCache/%s/", exchange)),
+		candlefs:    candlefs.New(CachePathExchange(exchange)),
 		symbols:     symbolsList,
 	}
 
