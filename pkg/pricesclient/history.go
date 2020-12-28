@@ -43,11 +43,11 @@ type Request struct {
 }
 
 func CachePath() string {
-	return "/candleCache"
+	return "/candleCache/"
 }
 
 func CachePathExchange(exchange string) string {
-	return fmt.Sprintf("%s/%s", CachePath(), exchange)
+	return fmt.Sprintf("%s/%s/", CachePath(), exchange)
 }
 
 func Create(host string, exchange string) (*Client, error) {
