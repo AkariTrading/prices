@@ -142,7 +142,7 @@ func (r *Request) Update(symbol string) error {
 
 	var hist *exchange.History
 
-	sh, err := r.c.candlefs.Open(symbol)
+	sh, err := r.c.candlefs.OpenReadWrite(symbol)
 	if err != nil {
 		r.logger.Error(err)
 		return err
@@ -167,7 +167,7 @@ func (r *Request) Update(symbol string) error {
 
 func (r *Request) Read(symbol string, start int64, end int64) (*exchange.History, error) {
 
-	sh, err := r.c.candlefs.Open(symbol)
+	sh, err := r.c.candlefs.OpenRead(symbol)
 	if err != nil {
 		return nil, err
 	}

@@ -8,6 +8,6 @@ require (
 	github.com/pkg/errors v0.8.1
 )
 
-replace github.com/akaritrading/libs v0.0.0 => ../libs
+replace github.com/akaritrading/libs v0.0.6 => ../libs
 
 // replace github.com/akaritrading/prices/pkg v0.0.0 => ./pkg

@@ -25,7 +25,7 @@ func StartHistoryFetch(handle *candlefs.CandleFS, client exchange.Exchange, stop
 				var trueStart int64
 				var start int64
 
-				sh, err := handle.Open(s)
+				sh, err := handle.OpenReadWrite(s)
 				if err != nil {
 					logger.Error(errors.WithStack(err))
 					goto skip

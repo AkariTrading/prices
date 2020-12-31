@@ -89,7 +89,7 @@ func priceHistory(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		symbolHandle, err := binanceCandlefs.Open(symbol)
+		symbolHandle, err := binanceCandlefs.OpenRead(symbol)
 		if err != nil {
 			logger.Error(errors.WithStack(err))
 			w.WriteHeader(http.StatusInternalServerError)
