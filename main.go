@@ -17,6 +17,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+const candlesPath = "/candles/binance/"
+
 var binanceClient *binance.BinanceClient
 var binanceCandlefs *candlefs.CandleFS
 
@@ -29,12 +31,12 @@ func main() {
 		logger.Fatal(err)
 	}
 
-	err = os.MkdirAll("/candles/binance/", 0644)
+	err = os.MkdirAll(candlesPath, 0644)
 	if err != nil {
 		logger.Fatal(err)
 	}
 
-	binanceCandlefs = candlefs.New("/candles/binance/")
+	binanceCandlefs = candlefs.New(candlesPath)
 
 	stopJob := make(chan int)
 	util.OnExit(stopJob)
@@ -43,6 +45,7 @@ func main() {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestContext("prices", nil))
 	r.Use(middleware.Recoverer)
+	r.Use(middleware.JSONResponse)
 
 	r.Route("/{exchange}/history/{symbol}", func(newRoute chi.Router) {
 		// newRoute.Use(chimiddleware.Compress(5))
@@ -50,18 +53,14 @@ func main() {
 	})
 
 	server := &http.Server{
-		Addr:    flag.PricesHost(),
+		Addr:    flag.ServicePort("prices"),
 		Handler: r,
 	}
 
-	if err := server.ListenAndServe(); err != nil {
-		logger.Error(err)
-	}
+	logger.Fatal(server.ListenAndServe())
 }
 
 func priceHistory(w http.ResponseWriter, r *http.Request) {
-
-	w.Header().Set("Content-Type", "application/json")
 
 	logger := middleware.GetLogger(r)
 

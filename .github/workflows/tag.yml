@@ -1,0 +1,58 @@
+name: Build and Publish Version Image
+
+on:
+  push:
+    tags:
+        - '*'
+
+env:
+  PROJECT_ID: ${{ secrets.GCLOUD_PROJECT_ID }}
+  IMAGE: ${{ github.event.repository.name }}
+  GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+jobs:
+
+  build-publish:
+    name: Build and Push Image
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+
+    - name: Get the version
+      id: get_version
+      run: echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
+
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@master
+      with:
+        service_account_key: ${{ secrets.GCLOUD_SA_KEY }}
+        project_id: ${{ secrets.GCLOUD_PROJECT_ID }}
+        export_default_credentials: true
+        
+    - name: Authenticate with gcloud
+      run: |-
+        gcloud --quiet auth configure-docker
+
+    # Build the Docker image
+    - name: Build Image
+      env:
+          VERSION: ${{ steps.get_version.outputs.VERSION }}
+      run: |-
+        docker build --build-arg GH_TOKEN=$GH_TOKEN -t "gcr.io/$PROJECT_ID/$IMAGE:$VERSION" -t "gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA" -t "gcr.io/$PROJECT_ID/$IMAGE:latest" .
+
+    # Push the Docker image to Google Container Registry
+    - name: Push Image
+      run: |-
+        docker push "gcr.io/$PROJECT_ID/$IMAGE"
+
+    # Sytem tests
+      # HERE
+
+
+    # then tag as stable and push  
+    - name: Push Stable Image
+      run: |-
+        docker tag gcr.io/$PROJECT_ID/$IMAGE "gcr.io/$PROJECT_ID/$IMAGE:stable"
+        docker push "gcr.io/$PROJECT_ID/$IMAGE"
