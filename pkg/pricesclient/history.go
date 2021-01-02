@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"path"
 	"sync"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/akaritrading/libs/exchange"
 	"github.com/akaritrading/libs/exchange/binance"
 	"github.com/akaritrading/libs/exchange/candlefs"
+	"github.com/akaritrading/libs/flag"
 	"github.com/akaritrading/libs/log"
 	"github.com/akaritrading/libs/middleware"
 	"github.com/akaritrading/libs/util"
@@ -43,16 +45,16 @@ type Request struct {
 }
 
 func CachePath() string {
-	return "/candleCache/"
+	return flag.PricesCachePath()
 }
 
 func CachePathExchange(exchange string) string {
-	return fmt.Sprintf("%s/%s/", CachePath(), exchange)
+	return path.Join(CachePath(), exchange)
 }
 
 func Create(host string, exchange string) (*Client, error) {
 
-	if err := os.MkdirAll(fmt.Sprintf("%s/%s/", CachePath(), exchange), 0644); err != nil {
+	if err := os.MkdirAll(CachePathExchange(exchange), 0644); err != nil {
 		return nil, err
 	}
 

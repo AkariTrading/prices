@@ -1,9 +1,9 @@
 package main
 
 import (
-	"fmt"
 	"net/http"
 	"os"
+	"path"
 	"time"
 
 	"github.com/akaritrading/libs/errutil"
@@ -17,8 +17,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-const candlesPath = "/candles/binance/"
-
 var binanceClient *binance.BinanceClient
 var binanceCandlefs *candlefs.CandleFS
 
@@ -31,12 +29,14 @@ func main() {
 		logger.Fatal(err)
 	}
 
-	err = os.MkdirAll(candlesPath, 0644)
+	binancePath := path.Join(flag.PricesPath(), "binance")
+
+	err = os.MkdirAll(binancePath, 0644)
 	if err != nil {
 		logger.Fatal(err)
 	}
 
-	binanceCandlefs = candlefs.New(candlesPath)
+	binanceCandlefs = candlefs.New(binancePath)
 
 	stopJob := make(chan int)
 	util.OnExit(stopJob)
@@ -89,22 +89,20 @@ func priceHistory(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		symbolHandle, err := binanceCandlefs.OpenRead(symbol)
+		sh, err := binanceCandlefs.OpenRead(symbol)
 		if err != nil {
 			logger.Error(errors.WithStack(err))
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		defer symbolHandle.Close()
+		defer sh.Close()
 
-		data, err := symbolHandle.Encode(start, end)
+		data, err := sh.Encode(start, end)
 		if err != nil {
 			logger.Error(errors.WithStack(err))
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-
-		fmt.Println(start, end, len(data))
 
 		w.Write(data)
 	} else {
