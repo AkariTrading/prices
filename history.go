@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/akaritrading/libs/exchange"
@@ -22,7 +23,6 @@ func StartHistoryFetch(handle *candlefs.CandleFS, client exchange.Exchange, stop
 			for _, s := range symbols {
 
 				var candles []exchange.Candle
-				var trueStart int64
 				var start int64
 
 				sh, err := handle.OpenReadWrite(s)
@@ -30,24 +30,21 @@ func StartHistoryFetch(handle *candlefs.CandleFS, client exchange.Exchange, stop
 					logger.Error(errors.WithStack(err))
 					goto skip
 				}
+				defer sh.Close()
 
 				start = sh.End()
 
 				for {
+
+					logger.Info(fmt.Sprintf("%s, starting fetch at %d", s, start))
+
 					history, err := client.Klines(s, start, true)
 					if err != nil {
 						logger.Error(errors.WithStack(err))
 						goto skip
 					}
 
-					if trueStart == 0 {
-						trueStart = history.Start
-					}
-
-					if history.End > 0 {
-						start = history.End
-					}
-
+					start = history.End
 					candles = append(candles, history.Candles...)
 
 					if len(history.Candles) == 0 {
@@ -56,13 +53,10 @@ func StartHistoryFetch(handle *candlefs.CandleFS, client exchange.Exchange, stop
 				}
 
 			skip:
-				if trueStart > 0 {
-					if err := sh.Append(trueStart, candles); err != nil {
+				if len(candles) > 0 {
+					if err := sh.Append(sh.End(), candles); err != nil {
 						logger.Error(errors.WithStack(err))
 					}
-				}
-				if sh != nil {
-					sh.Close()
 				}
 
 				select {
