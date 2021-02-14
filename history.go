@@ -42,7 +42,7 @@ func StartHistoryFetch(handle *candlefs.CandleFS, client exchange.Exchange, stop
 						break
 					}
 
-					if err := sh.Append(history.Start, history.Candles); err != nil {
+					if err := sh.Append(sh.End(), history.Candles); err != nil {
 						logger.Error(errors.WithStack(err))
 					}
 				}
