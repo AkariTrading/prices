@@ -3,7 +3,7 @@ module github.com/akaritrading/prices
 go 1.15
 
 require (
-	github.com/akaritrading/libs v0.0.7
+	github.com/akaritrading/libs v0.0.8
 	github.com/go-chi/chi v4.1.2+incompatible
 	github.com/pkg/errors v0.8.1
 )
