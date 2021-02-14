@@ -22,9 +22,6 @@ func StartHistoryFetch(handle *candlefs.CandleFS, client exchange.Exchange, stop
 
 			for _, s := range symbols {
 
-				var candles []exchange.Candle
-				var start int64
-
 				sh, err := handle.OpenReadWrite(s)
 				if err != nil {
 					logger.Error(errors.WithStack(err))
@@ -32,31 +29,29 @@ func StartHistoryFetch(handle *candlefs.CandleFS, client exchange.Exchange, stop
 				}
 				defer sh.Close()
 
-				start = sh.End()
-
 				for {
 
-					logger.Info(fmt.Sprintf("%s, starting fetch at %d", s, start))
+					logger.Info(fmt.Sprintf("%s, starting fetch at %d", s, sh.End()))
 
-					history, err := client.Klines(s, start, true)
+					history, err := client.Klines(s, sh.End(), true)
 					if err != nil {
 						logger.Error(errors.WithStack(err))
 						goto skip
 					}
 
-					start = history.End
-					candles = append(candles, history.Candles...)
-
 					if len(history.Candles) == 0 {
 						break
+					}
+
+					if err := sh.Append(history.Start, history.Candles); err != nil {
+						logger.Error(errors.WithStack(err))
 					}
 				}
 
 			skip:
-				if len(candles) > 0 {
-					if err := sh.Append(sh.End(), candles); err != nil {
-						logger.Error(errors.WithStack(err))
-					}
+
+				if sh != nil {
+					sh.Close()
 				}
 
 				select {
